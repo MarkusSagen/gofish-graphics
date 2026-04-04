@@ -4,7 +4,7 @@
 
 - [ ] Fast next-layer for when you are just selecting the previous layer
 - [ ] control over scatter pie radii
-- [ ] z-indexing
+- [x] z-indexing
 - [ ] position using center?
 
 ## Basic Charts
@@ -13,14 +13,14 @@
 - [x] horizontal bar chart
 - [x] scatter plot
 - [x] line chart
-- [ ] area chart
+- [x] area chart
 - [x] pie chart
 
 ## Still Basic
 
 - [x] stacked bar chart
 - [x] grouped bar chart
-- [ ] stacked area chart
+- [x] stacked area chart
 - [x] donut chart
 - [x] rose chart
 
@@ -31,21 +31,20 @@
 - [x] waffle
 - [x] ribbon
 - [x] polar ribbon
-- [ ] ridgeline
-- [ ] layered area
-- [-] scatter pie (needs more control over variable radii)
-- [-] connected scatter plot (needs z-index control. also a bug when replacing circle w/ scaffold
-  that seems like it's not getting placed in the center but at some other place)
-- [ ] flower chart
-- [ ] balloon
+- [x] ridgeline
+- [x] layered area
+- [-] scatter pie (v3 story exists with hardcoded radii; needs data-driven variable radii control)
+- [x] connected scatter plot (uses .zIndex() for clean layer ordering)
+- [x] flower chart
+- [x] balloon
 
 ## Even More Complicated
 
-- [ ] bump chart
-- [ ] box and whisker
-- [ ] violin plot
-- [ ] stringline
-- [ ] icicle chart
-- [ ] sankey tree
-- [ ] nested waffle
-- [ ] nested mosaic
+- [x] bump chart
+- [x] box and whisker (v1/v2 example in docs)
+- [x] violin plot (v1/v2 example in docs)
+- [x] stringline (v1/v2 example in docs)
+- [x] icicle chart (v1/v2 example in docs)
+- [x] sankey tree (v1/v2 example in docs)
+- [x] nested waffle
+- [x] nested mosaic
