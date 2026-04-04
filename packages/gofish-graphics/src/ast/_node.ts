@@ -137,6 +137,7 @@ export class GoFishNode {
   public coordinateTransform?: CoordinateTransform;
   public color?: MaybeValue<string>;
   public colorConfig?: ColorConfig;
+  public zIndex?: number;
   private renderSession?: RenderSession;
   constructor(
     {
@@ -404,11 +405,17 @@ export class GoFishNode {
         /* TODO: do we want to add this as an object property? */
         coordinateTransform: coordinateTransform,
       },
-      this.children.map((child) =>
-        child.INTERNAL_render(
-          this.type !== "box" ? coordinateTransform : undefined
+      // Sort children by zIndex (stable sort preserves original order for equal values)
+      [...this.children]
+        .sort(
+          (a, b) =>
+            ((a as GoFishNode).zIndex ?? 0) - ((b as GoFishNode).zIndex ?? 0)
         )
-      ),
+        .map((child) =>
+          child.INTERNAL_render(
+            this.type !== "box" ? coordinateTransform : undefined
+          )
+        ),
       this
     );
   }
@@ -478,6 +485,11 @@ export class GoFishNode {
 
   public setShared(shared: Size<boolean>): this {
     this.shared = shared;
+    return this;
+  }
+
+  public setZIndex(zIndex: number): this {
+    this.zIndex = zIndex;
     return this;
   }
 }

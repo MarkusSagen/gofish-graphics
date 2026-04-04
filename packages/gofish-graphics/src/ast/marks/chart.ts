@@ -186,19 +186,22 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   private readonly operators: Operator<any, any>[] = [];
   private readonly finalMark?: Mark<TOutput>;
   private readonly layerContext: LayerContext;
+  private readonly _zIndex?: number;
 
   constructor(
     data: TInput,
     options?: ChartOptions,
     operators: Operator<any, any>[] = [],
     finalMark?: Mark<TOutput>,
-    layerContext: LayerContext = {}
+    layerContext: LayerContext = {},
+    zIndex?: number
   ) {
     this.data = data;
     this.options = options;
     this.operators = operators;
     this.finalMark = finalMark;
     this.layerContext = layerContext;
+    this._zIndex = zIndex;
   }
 
   // flow accumulates operators and returns a new builder for chaining
@@ -248,7 +251,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.options,
       [...this.operators, ...ops],
       this.finalMark,
-      this.layerContext
+      this.layerContext,
+      this._zIndex
     );
   }
 
@@ -276,7 +280,20 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.options,
       this.operators,
       mark,
-      this.layerContext
+      this.layerContext,
+      this._zIndex
+    );
+  }
+
+  // zIndex sets the rendering order within a Layer (higher = rendered on top)
+  zIndex(z: number): ChartBuilder<TInput, TOutput> {
+    return new ChartBuilder(
+      this.data,
+      this.options,
+      this.operators,
+      this.finalMark,
+      this.layerContext,
+      z
     );
   }
 
@@ -313,6 +330,11 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       node.colorConfig = this.options.color;
     }
 
+    // Apply z-index for ordering within Layer
+    if (this._zIndex !== undefined) {
+      node.zIndex = this._zIndex;
+    }
+
     return node;
   }
 
@@ -322,7 +344,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.options,
       this.operators,
       this.finalMark,
-      layerContext
+      layerContext,
+      this._zIndex
     );
   }
 

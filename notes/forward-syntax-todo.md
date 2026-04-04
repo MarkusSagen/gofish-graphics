@@ -4,7 +4,7 @@
 
 - [ ] Fast next-layer for when you are just selecting the previous layer
 - [ ] control over scatter pie radii
-- [ ] z-indexing
+- [x] z-indexing
 - [ ] position using center?
 
 ## Basic Charts
@@ -34,8 +34,7 @@
 - [ ] ridgeline
 - [ ] layered area
 - [-] scatter pie (needs more control over variable radii)
-- [-] connected scatter plot (needs z-index control. also a bug when replacing circle w/ scaffold
-  that seems like it's not getting placed in the center but at some other place)
+- [x] connected scatter plot (uses .zIndex() for clean layer ordering)
 - [ ] flower chart
 - [ ] balloon
 

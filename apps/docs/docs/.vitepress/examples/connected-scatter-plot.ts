@@ -1,15 +1,16 @@
 gf.Layer([
-  gf.Chart(drivingShifts)
+  gf
+    .Chart(drivingShifts)
     .flow(gf.scatter("year", { x: "miles", y: "gas" }))
     .mark(
-      gf.circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }).name(
-        "points"
-      )
-    ),
-  gf.Chart(gf.select("points")).mark(gf.line({ stroke: "black", strokeWidth: 2 })),
-  gf.Chart(drivingShifts)
-    .flow(gf.scatter("year", { x: "miles", y: "gas" }))
-    .mark(gf.circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 })),
+      gf
+        .circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 })
+        .name("points")
+    )
+    .zIndex(1),
+  gf
+    .Chart(gf.select("points"))
+    .mark(gf.line({ stroke: "black", strokeWidth: 2 })),
 ]).render(root, {
   w: 500,
   h: 300,
