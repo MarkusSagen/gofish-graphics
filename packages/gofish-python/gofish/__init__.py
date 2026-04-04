@@ -28,6 +28,12 @@ from .ast import (
     petal,
     text,
     image,
+    # High-level chart functions
+    bar_chart,
+    scatter_chart,
+    line_chart,
+    area_chart,
+    pie_chart,
 )
 
 __all__ = [
@@ -56,6 +62,12 @@ __all__ = [
     "petal",
     "text",
     "image",
+    # High-level chart functions
+    "bar_chart",
+    "scatter_chart",
+    "line_chart",
+    "area_chart",
+    "pie_chart",
 ]
 
 __version__ = "0.1.0"

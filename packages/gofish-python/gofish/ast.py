@@ -801,6 +801,174 @@ class LayerBuilder:
         return widget
 
 
+## High-Level Chart API ##
+
+
+def bar_chart(
+    data: Any,
+    x: str,
+    y: str,
+    orientation: str = "y",
+    fill: Optional[str] = None,
+) -> ChartBuilder:
+    """
+    Create a bar chart.
+
+    Args:
+        data: Input data (list of dicts or DataFrame)
+        x: Field for x-axis
+        y: Field for y-axis
+        orientation: "y" for vertical bars, "x" for horizontal bars
+        fill: Field or color string for bar fill
+
+    Returns:
+        ChartBuilder instance
+
+    Examples:
+        >>> bar_chart(data, x="category", y="value")
+        >>> bar_chart(data, x="category", y="value", fill="group")
+        >>> bar_chart(data, x="category", y="value").stack("group", dir="y")
+    """
+    mark_kwargs: Dict[str, Any] = {}
+    if fill:
+        mark_kwargs["fill"] = fill
+
+    if orientation == "y":
+        mark_kwargs["h"] = y
+        return chart(data).flow(spread(x, dir="x")).mark(rect(**mark_kwargs))
+    else:
+        mark_kwargs["w"] = x
+        return chart(data).flow(spread(y, dir="y")).mark(rect(**mark_kwargs))
+
+
+def scatter_chart(
+    data: Any,
+    x: str,
+    y: str,
+    group_by: Optional[str] = None,
+    r: int = 5,
+    fill: Optional[str] = None,
+) -> ChartBuilder:
+    """
+    Create a scatter plot.
+
+    Args:
+        data: Input data (list of dicts or DataFrame)
+        x: Field for x-axis values
+        y: Field for y-axis values
+        group_by: Field to group points by (defaults to x)
+        r: Radius of points
+        fill: Field or color string for point fill
+
+    Returns:
+        ChartBuilder instance
+
+    Examples:
+        >>> scatter_chart(data, x="longitude", y="latitude", group_by="name")
+    """
+    group_field = group_by or x
+    mark_kwargs: Dict[str, Any] = {"r": r}
+    if fill:
+        mark_kwargs["fill"] = fill
+
+    return chart(data).flow(scatter(group_field, x=x, y=y)).mark(
+        circle(**mark_kwargs)
+    )
+
+
+def line_chart(
+    data: Any,
+    x: str,
+    y: str,
+    stroke: Optional[str] = None,
+    strokeWidth: int = 2,
+) -> LayerBuilder:
+    """
+    Create a line chart.
+
+    Args:
+        data: Input data (list of dicts or DataFrame)
+        x: Field for x-axis
+        y: Field for y-axis
+        stroke: Stroke color
+        strokeWidth: Stroke width
+
+    Returns:
+        LayerBuilder instance
+
+    Examples:
+        >>> line_chart(data, x="date", y="value")
+    """
+    scaffold_chart = (
+        chart(data)
+        .flow(spread(x, dir="x"))
+        .mark(scaffold(h=y).name("points"))
+    )
+    line_layer = chart(select("points")).mark(
+        line(stroke=stroke, strokeWidth=strokeWidth)
+    )
+    return Layer([scaffold_chart, line_layer])
+
+
+def area_chart(
+    data: Any,
+    x: str,
+    y: str,
+    opacity: float = 0.8,
+) -> LayerBuilder:
+    """
+    Create an area chart.
+
+    Args:
+        data: Input data (list of dicts or DataFrame)
+        x: Field for x-axis
+        y: Field for y-axis
+        opacity: Area opacity
+
+    Returns:
+        LayerBuilder instance
+
+    Examples:
+        >>> area_chart(data, x="date", y="value")
+    """
+    scaffold_chart = (
+        chart(data)
+        .flow(spread(x, dir="x"))
+        .mark(scaffold(h=y).name("points"))
+    )
+    area_layer = chart(select("points")).mark(area(opacity=opacity))
+    return Layer([scaffold_chart, area_layer])
+
+
+def pie_chart(
+    data: Any,
+    theta: str,
+    size: str,
+    fill: Optional[str] = None,
+) -> ChartBuilder:
+    """
+    Create a pie chart.
+
+    Args:
+        data: Input data (list of dicts or DataFrame)
+        theta: Field for angular categories
+        size: Field for wedge sizes
+        fill: Field for fill color (defaults to theta)
+
+    Returns:
+        ChartBuilder instance
+
+    Examples:
+        >>> pie_chart(data, theta="species", size="count")
+    """
+    fill_field = fill or theta
+    return (
+        chart(data, {"coord": clock()})
+        .flow(stack(theta, dir="x"))
+        .mark(rect(w=size, fill=fill_field))
+    )
+
+
 def Layer(
     children_or_options: Union[List[ChartBuilder], dict],
     children: Optional[List[ChartBuilder]] = None,
