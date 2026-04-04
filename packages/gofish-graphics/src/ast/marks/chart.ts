@@ -15,6 +15,7 @@ import { GoFishNode } from "../_node";
 import { For } from "../iterators/for";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { type ColorConfig } from "../colorSchemes";
+import type { DebugData } from "../../debug/types";
 
 export type { ColorConfig };
 import { inferSize } from "../channels";
@@ -336,6 +337,33 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       ...options,
       colorConfig: this.options?.color,
     });
+  }
+
+  async debug(options: {
+    w: number;
+    h: number;
+    padding?: number;
+  }): Promise<DebugData> {
+    const node = await this.resolve();
+    const { DebugCollector } = await import("../../debug/collector");
+    const { collectDebugData, layout } = await import("../gofish");
+
+    const session = {
+      scopeContext: new Map(),
+      scaleContext: {
+        unit: { color: new Map(), colorConfig: this.options?.color },
+      },
+      keyContext: {},
+      debugCollector: new DebugCollector(),
+    };
+
+    node.setRenderSession(session);
+
+    await layout({ w: options.w, h: options.h, debug: true }, node, {
+      session,
+    });
+
+    return collectDebugData(node, options, session);
   }
 }
 
