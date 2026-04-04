@@ -4,7 +4,7 @@ import { barChart } from "../../src/charts/bar";
 import { lineChart } from "../../src/charts/line";
 import { scatterChart } from "../../src/charts/scatter";
 import { areaChart } from "../../src/charts/area";
-import { pieChart } from "../../src/charts/pie";
+import { pieChart, donutChart } from "../../src/charts/pie";
 import { fishData } from "../../src/data/fish";
 import { seafood, catchLocationsArray } from "../../src/data/catch";
 
@@ -265,6 +265,40 @@ export const PieChartWithFill: StoryObj<Args> = {
       theta: "category",
       size: "value",
       fill: "category",
+    }).render(container, {
+      w: args.w,
+      h: args.h,
+    });
+    return container;
+  },
+};
+
+export const DonutChart: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    donutChart(simpleData, {
+      theta: "category",
+      size: "value",
+      fill: "category",
+    }).render(container, {
+      w: args.w,
+      h: args.h,
+    });
+    return container;
+  },
+};
+
+export const DonutChartCustomRadius: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    donutChart(simpleData, {
+      theta: "category",
+      size: "value",
+      fill: "category",
+      innerRadius: 30,
+      outerRadius: 70,
     }).render(container, {
       w: args.w,
       h: args.h,

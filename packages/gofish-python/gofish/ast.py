@@ -969,6 +969,39 @@ def pie_chart(
     )
 
 
+def donut_chart(
+    data: Any,
+    theta: str,
+    size: str,
+    fill: Optional[str] = None,
+    inner_radius: int = 50,
+    outer_radius: int = 50,
+) -> ChartBuilder:
+    """
+    Create a donut chart (pie chart with a hole in the center).
+
+    Args:
+        data: Input data (list of dicts or DataFrame)
+        theta: Field for angular categories
+        size: Field for wedge sizes
+        fill: Field for fill color (defaults to theta)
+        inner_radius: Distance from center to inner edge (default 50)
+        outer_radius: Width of the donut ring (default 50)
+
+    Returns:
+        ChartBuilder instance
+
+    Examples:
+        >>> donut_chart(data, theta="species", size="count")
+    """
+    fill_field = fill or theta
+    return (
+        chart(data, {"coord": clock()})
+        .flow(stack(theta, dir="x", y=inner_radius, h=outer_radius))
+        .mark(rect(w=size, fill=fill_field))
+    )
+
+
 def Layer(
     children_or_options: Union[List[ChartBuilder], dict],
     children: Optional[List[ChartBuilder]] = None,

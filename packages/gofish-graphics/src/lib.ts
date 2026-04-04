@@ -102,4 +102,4 @@ export { barChart } from "./charts/bar";
 export { lineChart } from "./charts/line";
 export { scatterChart } from "./charts/scatter";
 export { areaChart } from "./charts/area";
-export { pieChart } from "./charts/pie";
+export { pieChart, donutChart } from "./charts/pie";
