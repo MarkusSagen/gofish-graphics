@@ -6,7 +6,7 @@ import { scatterChart } from "../../src/charts/scatter";
 import { areaChart } from "../../src/charts/area";
 import { pieChart } from "../../src/charts/pie";
 import { fishData } from "../../src/data/fish";
-import { catchLocationsArray } from "../../src/data/catch";
+import { seafood, catchLocationsArray } from "../../src/data/catch";
 
 const meta: Meta = {
   title: "Forward Syntax V3/High-Level API",
@@ -215,6 +215,43 @@ export const PieChart: StoryObj<Args> = {
     }).render(container, {
       w: args.w,
       h: args.h,
+    });
+    return container;
+  },
+};
+
+export const MultiSeriesLineChart: StoryObj<Args> = {
+  args: { w: 500, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    lineChart(seafood, {
+      x: "lake",
+      y: "count",
+      color: "species",
+    }).render(container, {
+      w: args.w,
+      h: args.h,
+      axes: true,
+    });
+    return container;
+  },
+};
+
+export const ScatterChartWithStroke: StoryObj<Args> = {
+  args: { w: 500, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    scatterChart(catchLocationsArray, {
+      x: "x",
+      y: "y",
+      r: 8,
+      fill: "white",
+      stroke: "black",
+      strokeWidth: 2,
+    }).render(container, {
+      w: args.w,
+      h: args.h,
+      axes: true,
     });
     return container;
   },

@@ -7,6 +7,8 @@ export const scatterChart = <T extends Record<string, any>>(
     y: keyof T;
     r?: number;
     fill?: keyof T | string;
+    stroke?: string;
+    strokeWidth?: number;
   }
 ) => {
   return Chart(data)
@@ -15,6 +17,8 @@ export const scatterChart = <T extends Record<string, any>>(
       circle({
         r: options.r ?? 5,
         fill: options.fill as string | undefined,
+        stroke: options.stroke,
+        strokeWidth: options.strokeWidth,
       })
     );
 };
