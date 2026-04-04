@@ -22,4 +22,6 @@ __pycache__/
 _static/
 .cursor/
 .claude/
+.worktrees/
+.superpowers/
 tests/tmp/
