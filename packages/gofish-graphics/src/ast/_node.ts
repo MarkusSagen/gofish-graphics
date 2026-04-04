@@ -41,11 +41,13 @@ import {
   assignGradientColor,
   type ColorConfig,
 } from "./colorSchemes";
+import type { DebugCollector } from "../debug/collector";
 
 export type RenderSession = {
   scopeContext: ScopeContext;
   scaleContext: ScaleContext;
   keyContext: KeyContext;
+  debugCollector?: DebugCollector;
 };
 
 export type ScaleFactorFunction = Monotonic.Monotonic;

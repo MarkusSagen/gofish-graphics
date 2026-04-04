@@ -9,6 +9,9 @@ import {
   type GoFishNode,
   type RenderSession,
 } from "./_node";
+import { DebugCollector } from "../debug/collector";
+import { serializeSnapshot } from "../debug/serializer";
+import type { DebugData } from "../debug/types";
 import { computePosScale } from "./domain";
 import { tickIncrement, ticks, nice } from "d3-array";
 import { isConstant } from "../util/monotonic";
@@ -143,6 +146,9 @@ export async function layout(
   if (contexts?.session) {
     child.setRenderSession(contexts.session);
   }
+  const collector = debug
+    ? (contexts?.session?.debugCollector ?? undefined)
+    : undefined;
   if (
     typeof document !== "undefined" &&
     document.fonts &&
@@ -160,10 +166,35 @@ export async function layout(
   // const layoutAST = sizeThatFitsAST.layout();
   // return render({ width, height, transform }, layoutAST);
   child.resolveColorScale();
+  collector?.emit("colorScale", child.uid, child.type, "Color scale resolved", {
+    colorCount: contexts?.session?.scaleContext?.unit?.color?.size ?? 0,
+  });
   child.resolveNames();
+  collector?.emit("names", child.uid, child.type, "Names resolved", {
+    nameCount: contexts?.session?.scopeContext?.size ?? 0,
+  });
   child.resolveKeys();
+  collector?.emit("keys", child.uid, child.type, "Keys resolved", {
+    keyCount: Object.keys(contexts?.session?.keyContext ?? {}).length,
+  });
   const sizeDomains = child.inferSizeDomains();
+  collector?.emit(
+    "sizeDomains",
+    child.uid,
+    child.type,
+    "Size domains inferred"
+  );
   const [underlyingSpaceX, underlyingSpaceY] = child.resolveUnderlyingSpace();
+  collector?.emit(
+    "underlyingSpace",
+    child.uid,
+    child.type,
+    `Resolved: x=${underlyingSpaceX.kind}, y=${underlyingSpaceY.kind}`,
+    {
+      x: underlyingSpaceX.kind,
+      y: underlyingSpaceY.kind,
+    }
+  );
 
   // Apply nice rounding to POSITION space domains
   let niceUnderlyingSpaceX = underlyingSpaceX;
@@ -228,13 +259,36 @@ export async function layout(
       : undefined,
   ];
 
+  collector?.emit(
+    "posScales",
+    child.uid,
+    child.type,
+    "Position scales computed",
+    {
+      hasX: posScales[0] !== undefined,
+      hasY: posScales[1] !== undefined,
+    }
+  );
+
   if (debug) {
     console.log("width and height constraints:", w, h);
   }
 
   child.layout([w, h], [undefined, undefined], posScales);
+  collector?.emit(
+    "layout",
+    child.uid,
+    child.type,
+    `Layout complete in ${w}x${h} space`
+  );
   child.place("x", x ?? transform?.x ?? 0, "baseline");
   child.place("y", y ?? transform?.y ?? 0, "baseline");
+  collector?.emit(
+    "placement",
+    child.uid,
+    child.type,
+    `Placed at x=${x ?? transform?.x ?? 0}, y=${y ?? transform?.y ?? 0}`
+  );
 
   if (debug) {
     console.log("🌳 Node Tree:");
@@ -258,6 +312,19 @@ export async function layout(
     ordinalScales,
     child,
   };
+}
+
+export function collectDebugData(
+  child: GoFishNode,
+  renderOptions: { w: number; h: number; padding?: number },
+  session: RenderSession
+): DebugData {
+  const snapshot = serializeSnapshot(child, renderOptions, session);
+  const events = session.debugCollector?.getEventLog() ?? {
+    version: 1,
+    events: [],
+  };
+  return { snapshot, events };
 }
 
 /* global pass handler */
@@ -305,6 +372,7 @@ export const gofish = (
       scopeContext: new Map(),
       scaleContext: { unit: { color: new Map(), colorConfig } },
       keyContext: {},
+      debugCollector: debug ? new DebugCollector() : undefined,
     };
     try {
       const contexts = {
