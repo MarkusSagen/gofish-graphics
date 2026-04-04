@@ -128,6 +128,16 @@ export default defineConfig({
             { text: "clock", link: "/api/coords/clock" },
           ],
         },
+        {
+          text: "Debug Inspector",
+          items: [
+            { text: "Overview", link: "/api/debug/" },
+            { text: ".debug()", link: "/api/debug/debug-method" },
+            { text: "inspect()", link: "/api/debug/inspect" },
+            { text: "Save & Load", link: "/api/debug/save-load" },
+            { text: "SVG Overlays", link: "/api/debug/overlays" },
+          ],
+        },
       ],
       "/": [
         {
@@ -152,6 +162,12 @@ export default defineConfig({
                 link: example.demoUrl,
               })),
             },
+          ],
+        },
+        {
+          text: "Guides",
+          items: [
+            { text: "Debugging & Inspecting", link: "/guides/debugging" },
           ],
         },
         {
