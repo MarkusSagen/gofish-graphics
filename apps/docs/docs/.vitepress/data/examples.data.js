@@ -29,6 +29,16 @@ export default {
         // description: "A simple stacked bar chart",
       },
       {
+        id: "bar-with-labels",
+        title: "Bar Chart with Labels",
+        description: "A bar chart with total count labels above each group",
+      },
+      {
+        id: "stacked-bar-with-labels",
+        title: "Stacked Bar Chart with Labels",
+        description: "A stacked bar chart with inline labels",
+      },
+      {
         id: "grouped-bar-chart",
         title: "Grouped Bar Chart",
         description: "Horizontally stacked vertical bars",
@@ -59,6 +69,16 @@ export default {
       {
         id: "scatter-plot",
         title: "Scatter Plot",
+      },
+      {
+        id: "labeled-scatter-plot",
+        title: "Labeled Scatter Plot",
+        description: "A scatter plot with text labels at each point",
+      },
+      {
+        id: "lollipop-chart",
+        title: "Lollipop Chart",
+        description: "Bars with dots, combining multiple mark layers",
       },
       {
         id: "pie-chart",
