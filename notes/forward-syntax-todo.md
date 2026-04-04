@@ -4,7 +4,7 @@
 
 - [ ] Fast next-layer for when you are just selecting the previous layer
 - [ ] control over scatter pie radii
-- [ ] z-indexing
+- [x] z-indexing (feat/z-index branch)
 - [ ] position using center?
 
 ## Basic Charts
@@ -13,14 +13,14 @@
 - [x] horizontal bar chart
 - [x] scatter plot
 - [x] line chart
-- [ ] area chart
+- [x] area chart
 - [x] pie chart
 
 ## Still Basic
 
 - [x] stacked bar chart
 - [x] grouped bar chart
-- [ ] stacked area chart
+- [x] stacked area chart
 - [x] donut chart
 - [x] rose chart
 
@@ -31,21 +31,28 @@
 - [x] waffle
 - [x] ribbon
 - [x] polar ribbon
-- [ ] ridgeline
-- [ ] layered area
+- [x] ridgeline
+- [x] layered area
 - [-] scatter pie (needs more control over variable radii)
-- [-] connected scatter plot (needs z-index control. also a bug when replacing circle w/ scaffold
-  that seems like it's not getting placed in the center but at some other place)
-- [ ] flower chart
-- [ ] balloon
+- [x] connected scatter plot (uses z-index for layer ordering)
+- [x] flower chart (v1/v2 only — needs absolute positioning for v3)
+- [x] balloon (v1/v2 only — needs absolute positioning for v3)
 
 ## Even More Complicated
 
-- [ ] bump chart
-- [ ] box and whisker
-- [ ] violin plot
-- [ ] stringline
-- [ ] icicle chart
-- [ ] sankey tree
-- [ ] nested waffle
-- [ ] nested mosaic
+- [x] bump chart (ported to v3 in docs/bump-chart-v3 branch)
+- [ ] box and whisker (v1/v2 only — needs nested Frame + ConnectY for v3)
+- [ ] violin plot (v1/v2 only — needs KDE + nested ConnectY for v3)
+- [ ] stringline (v1/v2 only — needs nested Frame + ConnectY for v3)
+- [ ] icicle chart (v1/v2 only — needs tree/hierarchy operator for v3)
+- [ ] sankey tree (v1/v2 only — needs tree/hierarchy operator for v3)
+- [ ] nested waffle (v1/v2 only — needs nested composition for v3)
+- [ ] nested mosaic (v1/v2 only — needs nested composition for v3)
+
+## High-Level Chart API
+
+- [x] barChart (JS + Python)
+- [x] lineChart (JS + Python)
+- [x] scatterChart (JS + Python)
+- [x] areaChart (JS + Python, with .stack() support)
+- [x] pieChart (JS + Python)
