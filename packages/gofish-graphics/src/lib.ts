@@ -96,3 +96,14 @@ export type {
   GradientScale,
 } from "./ast/colorSchemes";
 export type { NameableMark } from "./ast/withGoFish";
+
+/* Debug Inspector */
+export { inspect, inspectHtml } from "./debug/inspector/index";
+export { saveDebugData, loadDebugData, debugDataToJson } from "./debug/utils";
+export type {
+  DebugSnapshot,
+  DebugEventLog,
+  DebugNode,
+  DebugEvent,
+  DebugData,
+} from "./debug/types";
