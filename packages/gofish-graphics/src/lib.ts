@@ -96,3 +96,10 @@ export type {
   GradientScale,
 } from "./ast/colorSchemes";
 export type { NameableMark } from "./ast/withGoFish";
+
+/* High-Level Chart API */
+export { barChart } from "./charts/bar";
+export { lineChart } from "./charts/line";
+export { scatterChart } from "./charts/scatter";
+export { areaChart } from "./charts/area";
+export { pieChart } from "./charts/pie";
