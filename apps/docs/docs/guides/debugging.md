@@ -40,9 +40,9 @@ The inspector is a tabbed panel with two views (more coming in future releases):
 
 ### Tree Tab
 
-<img src="/images/debug/inspector-tree-tab.png" alt="Debug inspector tree tab showing the AST tree with a spread operator containing rect shapes" style="border-radius:8px;border:1px solid #334155;max-width:100%" />
+<img src="/images/debug/linked-bar-chart.png" alt="Debug inspector shown side-by-side with a bar chart, with the AST tree on the right and the rendered visualization on the left" style="border-radius:8px;border:1px solid #334155;max-width:100%" />
 
-The Tree tab shows the full AST tree on the left and a detail panel on the right.
+The Tree tab shows the full AST tree alongside the rendered chart. When used in Storybook, the chart and inspector are linked — clicking a node in the tree highlights the corresponding element in the visualization, and clicking an element in the chart selects it in the tree.
 
 **Tree panel (left):**
 
@@ -65,9 +65,13 @@ When you select a node, the detail panel shows:
 
 **Breadcrumb navigation:** The breadcrumb bar at the top shows the path from the root to the selected node, making it easy to understand nesting.
 
-Here's a deeper example with a stacked bar chart, showing how the tree reveals nested operators and per-node details like color resolution and underlying space:
+Here's an example with a node selected — notice how the bounding box overlay highlights the corresponding bar in the chart, while the detail panel shows its identity, dimensions, bounds, underlying space, and color:
 
-<img src="/images/debug/inspector-stacked-detail.png" alt="Debug inspector showing a stacked bar chart with a rect node selected, displaying identity, dimensions, bounds, underlying space, and color info" style="border-radius:8px;border:1px solid #334155;max-width:100%" />
+<img src="/images/debug/linked-bar-selected.png" alt="Debug inspector with a bar node selected, showing highlighted bounding box on the chart and detail panel with identity, dimensions, bounds, and color info" style="border-radius:8px;border:1px solid #334155;max-width:100%" />
+
+For more complex charts like stacked bars, the tree reveals nested operators and per-node details. Selecting a specific rect within a stack shows its color resolution, data binding, and how it fits within the parent operator:
+
+<img src="/images/debug/linked-stacked-selected.png" alt="Debug inspector showing a stacked bar chart with a rect node selected in both the chart overlay and inspector tree" style="border-radius:8px;border:1px solid #334155;max-width:100%" />
 
 ### Snapshot Tab
 
