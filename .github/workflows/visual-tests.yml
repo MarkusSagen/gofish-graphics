@@ -67,16 +67,8 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Install Node dependencies
         run: pnpm install
-
-      - name: Install Python dependencies
-        run: pip install -e packages/gofish-python
 
       - name: Build gofish-graphics
         run: pnpm --filter gofish-graphics build
@@ -247,7 +239,7 @@ jobs:
         run: pnpm install
 
       - name: Install Python dependencies
-        run: pip install -e packages/gofish-python
+        run: pip install -e packages/gofish-python vega_datasets
 
       - name: Build gofish-graphics
         run: pnpm --filter gofish-graphics build
@@ -261,6 +253,15 @@ jobs:
         run: pnpm test:visual:check-python-sync
         env:
           BASE_REF: origin/main
+
+      # Full per-StoryObj coverage audit. Errors for any JS export that has
+      # no matching Python `story_*` and isn't on .python-sync-exempt.
+      # Exempt entries surface as warnings (visible in the log) so the
+      # known-not-yet-supported list doesn't silently rot.
+      - name: Full Python parity coverage (per-StoryObj)
+        id: sync-check-all
+        if: always()
+        run: pnpm test:visual:check-python-sync-all
 
       - name: Capture Python DOM snapshots
         id: capture-python
@@ -313,20 +314,39 @@ jobs:
             if (!url) return;
 
             const summaryPath = 'tests/tmp/parity-summary.json';
-            let description = 'Click Details to view JS/Python parity diffs';
+            let description = 'Click Details to review and accept parity diffs';
             try {
               const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+              // Use the export-level rollup the viewer renders. Single
+              // source of truth: build-parity-review-site computes these
+              // and writes them here.
               const parts = [];
-              const plural = (n, singular, pluralForm) =>
-                `${n} ${n === 1 ? singular : pluralForm}`;
-              if (summary.parityMismatches > 0) {
-                parts.push(plural(summary.parityMismatches, 'parity mismatch', 'parity mismatches'));
-              }
-              if (summary.missingBaselines > 0) {
-                parts.push(plural(summary.missingBaselines, 'missing baseline', 'missing baselines'));
-              }
+              const fmt = (n, label, subParts) => {
+                if (!(typeof n === 'number') || n === 0) return null;
+                if (Array.isArray(subParts) && subParts.length > 0) {
+                  return `${n} ${label} (${subParts.join(', ')})`;
+                }
+                return `${n} ${label}`;
+              };
+              const failures = fmt(
+                summary.exportsFailures,
+                'failures',
+                summary.exportsFailParts
+              );
+              const warnings = fmt(
+                summary.exportsWarnings,
+                'warnings',
+                summary.exportsWarnParts
+              );
+              const passed =
+                typeof summary.exportsPassed === 'number' && summary.exportsPassed > 0
+                  ? `${summary.exportsPassed} passed`
+                  : null;
+              if (failures) parts.push(failures);
+              if (warnings) parts.push(warnings);
+              if (passed) parts.push(passed);
               if (parts.length > 0) {
-                description = parts.join(', ') + ' — click Details to review';
+                description = parts.join(', ') + ' — click Details';
               }
             } catch (e) {
               // keep fallback description
