@@ -366,7 +366,7 @@ export type ScatterOptions = {
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 };
 
-export const scatter = createOperator<any, ScatterOptions>(Scatter, {
+export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
   // When no `by` is given, pass each item through as-is. Items may already be
   // arrays or scalars; downstream marks/channels handle either form.
   split: ({ by }, d) =>

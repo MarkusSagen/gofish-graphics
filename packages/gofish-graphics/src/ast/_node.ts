@@ -85,14 +85,7 @@ export type Layout = (
   shared: Size<boolean>,
   size: Size,
   scaleFactors: Size<number | undefined>,
-  children: {
-    layout: (
-      size: Size,
-      scaleFactors: Size<number | undefined>,
-      posScales: Size<((pos: number) => number) | undefined>,
-      posDomains?: Size<[number, number] | undefined>
-    ) => Placeable;
-  }[],
+  children: GoFishAST[],
   posScales: Size<((pos: number) => number) | undefined>,
   node: GoFishNode,
   posDomains?: Size<[number, number] | undefined>
@@ -268,11 +261,8 @@ export class GoFishNode {
           (color.startsWith("#") ||
             color.startsWith("rgb") ||
             color.startsWith("hsl"));
-        if (!isLiteralColor && !scaleContext.unit.color.has(color)) {
-          scaleContext.unit.color.set(
-            color,
-            color6[scaleContext.unit.color.size % 6]
-          );
+        if (!isLiteralColor && !unit.color.has(color)) {
+          unit.color.set(color, color6[unit.color.size % 6]);
         }
       }
       this.children.forEach((child) => {
@@ -823,7 +813,13 @@ export class GoFishNode {
     };
 
     if (anchorToDim[anchor] === undefined) {
-      this.intrinsicDims![dir][anchor] = value;
+      // Interval has min/max/center/size but not "baseline" — baseline is a
+      // synthetic anchor aliased to min above (see TODO). When the anchor is
+      // already undefined and we're being asked to set it, "baseline" can't
+      // be written back: just no-op so the translate path below is skipped.
+      if (anchor !== "baseline") {
+        this.intrinsicDims![dir][anchor] = value;
+      }
       return;
     }
 
@@ -1018,7 +1014,7 @@ export class GoFishNode {
 
 export const findPathToRoot = (node: GoFishNode): GoFishNode[] => {
   const path: GoFishNode[] = [];
-  let current = node;
+  let current: GoFishNode | undefined = node;
   while (current) {
     path.push(current);
     current = current.parent;

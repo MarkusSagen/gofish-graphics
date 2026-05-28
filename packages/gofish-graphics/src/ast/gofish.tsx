@@ -18,12 +18,25 @@ import type { Size } from "./dims";
 import { isSIZE, type UnderlyingSpace } from "./underlyingSpace";
 import { continuous } from "./domain";
 
-export type ScaleContext = {
-  [measure: string]:
-    | { color: Map<any, string>; colorConfig?: ColorConfig }
-    | { domain: [number, number]; scaleFactor: number };
+export type CategoricalScale = {
+  color: Map<any, string>;
+  colorConfig?: ColorConfig;
 };
 
+export type ContinuousScale = {
+  domain: [number, number];
+  scaleFactor: number;
+};
+
+export type Scale = CategoricalScale | ContinuousScale;
+
+export type ScaleContext = {
+  [measure: string]: Scale;
+};
+
+export const isCategoricalScale = (
+  s: Scale | undefined
+): s is CategoricalScale => s !== undefined && "color" in s;
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions = boolean | { title?: string | false };
 
