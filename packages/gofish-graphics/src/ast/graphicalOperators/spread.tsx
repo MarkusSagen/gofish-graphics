@@ -506,6 +506,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread, {
   channels: { w: "size", h: "size" },
   axisFields: ({ by, dir }) =>
     by ? (dir === "x" ? { x: by } : { y: by }) : undefined,
+  serialize: { type: "spread" },
 });
 
 /** Stack glues children together, summing sizes into a POSITION at the spread
@@ -523,5 +524,22 @@ export function stack(
   marks?: Mark<any>[]
 ): ReturnType<typeof spread> | Operator<any[], any[]> {
   const stackOpts: SpreadOptions = { ...opts, glue: true };
-  return marks !== undefined ? spread(stackOpts, marks) : spread(stackOpts);
+  const result =
+    marks !== undefined ? spread(stackOpts, marks) : spread(stackOpts);
+  // Stack is `spread({glue: true})` under the hood, but the IR wire format
+  // discriminates them by type. Re-tag the produced operator/mark so the
+  // frontend-IR emitter sees `{ type: "stack", ...stripped-opts }` instead
+  // of `{ type: "spread", glue: true, ... }`. Preserve `__combinator` and
+  // `children` when present (combinator form) — dropping them would make
+  // toJSON emit a leaf-shaped node missing its children.
+  const tag = (result as any).__serialize;
+  if (tag) {
+    const { glue: _glue, ...stackPayload } = tag.opts;
+    (result as any).__serialize = {
+      ...tag,
+      type: "stack",
+      opts: stackPayload,
+    };
+  }
+  return result;
 }

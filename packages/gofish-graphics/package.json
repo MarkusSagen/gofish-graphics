@@ -37,9 +37,10 @@
     "prepublishOnly": "pnpm run build",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test": "pnpm run test:path && pnpm run test:font",
+    "test": "pnpm run test:path && pnpm run test:font && pnpm run test:serialize",
     "test:path": "tsx src/tests/path.test.ts",
     "test:font": "tsx src/tests/fontUtils.test.ts",
+    "test:serialize": "pnpm run build && tsx src/tests/serialize.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -71,6 +72,7 @@
     "culori": "^4.0.2",
     "d3-array": "^3.2.4",
     "d3-hierarchy": "^3.1.2",
+    "gofish-ir": "workspace:*",
     "lodash": "^4.17.21",
     "perfect-arrows": "^0.3.7",
     "rybitten": "^0.22.0",
