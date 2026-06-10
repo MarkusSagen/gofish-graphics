@@ -10,7 +10,7 @@ import {
   Size,
 } from "../dims";
 import { Collection } from "lodash";
-import { computeAesthetic, computeSize } from "../../util";
+import { computeAesthetic, computeSize, foldFinite } from "../../util";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import * as Monotonic from "../../util/monotonic";
@@ -358,24 +358,6 @@ export const Spread = createNodeOperator(
             alignFromSize
           );
 
-          // Change 3: cancel each inner chart's own axis-budget shift in the
-          // align direction so bars land at posScale(0)=0 in outer content
-          // space. The outer's expanded alignDir budget (Change 1) provides
-          // the matching room so inner axis label rows stack flush against the
-          // outer's label row. We must mutate transform.translate directly:
-          // place() is a no-op when alignChildren has already set the value.
-          for (let i = 0; i < childPlaceables.length; i++) {
-            const child = children[i] as any;
-            if (!(child instanceof GoFishNode)) continue;
-            const baseline = child._contentBaseline[alignDir] as number;
-            if (baseline > 0) {
-              const translate = (child as GoFishNode).transform?.translate;
-              if (translate) {
-                translate[alignDir] = (translate[alignDir] ?? 0) - baseline;
-              }
-            }
-          }
-
           /* distribute */
           const firstFixedIdx = childPlaceables.findIndex(isFixed(stackDir));
           let pos: number;
@@ -436,19 +418,34 @@ export const Spread = createNodeOperator(
             }
           }
 
-          // Compute alignDir intrinsicDims from extents to account for negative bars
-          const alignMin = Math.min(
-            ...childPlaceables.map((child) => child.dims[alignDir].min!)
-          );
-          const alignMax = Math.max(
-            ...childPlaceables.map((child) => child.dims[alignDir].max!)
-          );
-          const stackMin = Math.min(
-            ...childPlaceables.map((child) => child.dims[stackDir].min!)
-          );
-          const stackMax = Math.max(
-            ...childPlaceables.map((child) => child.dims[stackDir].max!)
-          );
+          // A child the alignment step didn't place (no `alignment` given)
+          // renders at its own origin (translate 0): nail it down there now so
+          // the extents below measure the real box. Left unplaced, the child
+          // would be invisible to the measurement and the spread would report
+          // a zero cross extent — wrong whenever children's boxes overhang
+          // their origin (e.g. facets whose axis labels hang below baseline).
+          for (const child of childPlaceables) {
+            if (child.dims[alignDir].min === undefined) {
+              child.place(alignDir, 0, "baseline");
+            }
+          }
+
+          // Compute alignDir intrinsicDims from extents to account for negative
+          // bars (NaN-safe; see foldFinite for why undefined extents are
+          // skipped).
+          const reduceExtent = (
+            dir: Direction,
+            pick: (iv: { min?: number; max?: number }) => number | undefined,
+            f: (...n: number[]) => number
+          ): number =>
+            foldFinite(
+              childPlaceables.map((child) => pick(child.dims[dir])),
+              f
+            );
+          const alignMin = reduceExtent(alignDir, (iv) => iv.min, Math.min);
+          const alignMax = reduceExtent(alignDir, (iv) => iv.max, Math.max);
+          const stackMin = reduceExtent(stackDir, (iv) => iv.min, Math.min);
+          const stackMax = reduceExtent(stackDir, (iv) => iv.max, Math.max);
           const alignSize = alignMax - alignMin;
           const stackSize = stackMax - stackMin;
           const translateAlign =
@@ -500,7 +497,6 @@ export const Spread = createNodeOperator(
     }
     // Tag with stack direction so coord can map axis overrides to polar dimensions
     node.axisDir = stackDir;
-    node._layoutAlignDir = alignDir;
     return node;
   }
 );

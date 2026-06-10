@@ -17,6 +17,7 @@ import { computePosScale } from "./domain";
 import type { Size } from "./dims";
 import { isSIZE, type UnderlyingSpace } from "./underlyingSpace";
 import { continuous } from "./domain";
+import { elaborateAxes } from "./axes/elaborate";
 
 export type CategoricalScale = {
   color: Map<any, string>;
@@ -123,8 +124,40 @@ export async function layout(
 
   // Node-based axis pipeline: mark axis nodes and apply nice-rounding in-place
   if (axes) {
-    child.resolveAxes();
+    // Which dims the chart-level `axes` option enables. `true` → both. For an
+    // `{ x?, y? }` object, a dim is enabled unless it is explicitly `false` —
+    // an unspecified (undefined) dim still shows (specifying one axis doesn't
+    // disable the other); only `false` suppresses.
+    const enabled = new Set<0 | 1>();
+    if (axes === true) {
+      enabled.add(0);
+      enabled.add(1);
+    } else if (typeof axes === "object") {
+      if (axes.x !== false) enabled.add(0);
+      if (axes.y !== false) enabled.add(1);
+    }
+    child.resolveAxes(new Set(), enabled);
     child.resolveNiceDomains();
+
+    // Axis elaboration: turn inferred axes into ordinary shapes + constraints.
+    // Wraps axis-owning content in a Layer with tick/label shapes and clears the
+    // handled axis flags; the new subtree is then re-resolved below. A flag the
+    // pass doesn't handle (e.g. an UNDEFINED space) is inert — nothing else
+    // consumes `node.axis`.
+    const elaborated = await elaborateAxes(child);
+    if (elaborated.changed) {
+      child = elaborated.node;
+      if (contexts?.session) child.setRenderSession(contexts.session);
+      child.resolveColorScale();
+      child.resolveNames();
+      child.resolveLabels();
+      // The rewrite inserted new nodes (wrappers + axis shapes) and moved keys
+      // onto wrappers; `resolveUnderlyingSpace` memoizes, so clear every node's
+      // cached space and recompute the whole tree from scratch before re-nicing.
+      child.clearUnderlyingSpace();
+      child.resolveUnderlyingSpace();
+      child.resolveNiceDomains();
+    }
   }
 
   // Use (possibly nice-rounded) underlying spaces for posScales

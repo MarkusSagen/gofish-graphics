@@ -32,7 +32,7 @@ export const Table = createNodeOperator(
     const xSpacing = Array.isArray(spacing) ? spacing[0] : spacing;
     const ySpacing = Array.isArray(spacing) ? spacing[1] : spacing;
 
-    return new GoFishNode(
+    const node = new GoFishNode(
       {
         type: "table",
         args: { key, name, numCols, spacing, colKeys, rowKeys },
@@ -117,35 +117,6 @@ export const Table = createNodeOperator(
             child.place(1, row * (cellH + ySpacing) + cellH / 2, "center");
           }
 
-          // Store representative cells for ordinal axis label positioning.
-          // First-row cells provide x-positions for column keys.
-          // First-column cells provide y-positions for row keys.
-          // Cell (0,0) is registered under both — posRelToAncestor reads only
-          // the relevant dimension so it works correctly for either axis.
-          const ordinalKeyMap: Record<string, GoFishNode> = {};
-          if (colKeys) {
-            for (
-              let j = 0;
-              j < Math.min(numCols, childPlaceables.length);
-              j++
-            ) {
-              ordinalKeyMap[colKeys[j]] = childPlaceables[
-                j
-              ] as unknown as GoFishNode;
-            }
-          }
-          if (rowKeys) {
-            for (let i = 0; i < numRows; i++) {
-              const idx = i * numCols;
-              if (idx < childPlaceables.length) {
-                ordinalKeyMap[rowKeys[i]] = childPlaceables[
-                  idx
-                ] as unknown as GoFishNode;
-              }
-            }
-          }
-          node._ordinalKeyMap = ordinalKeyMap;
-
           const xMin = Math.min(...childPlaceables.map((c) => c.dims[0].min!));
           const xMax = Math.max(...childPlaceables.map((c) => c.dims[0].max!));
           const yMin = Math.min(...childPlaceables.map((c) => c.dims[1].min!));
@@ -183,6 +154,23 @@ export const Table = createNodeOperator(
       },
       children
     );
+
+    // Populate `_ordinalKeyMap` at construction (the layout pass sets the same
+    // map from placeables, but axis elaboration runs BEFORE layout and needs it
+    // to ref the representative cell for each col/row key). First-row cells give
+    // x-positions for column keys; first-column cells give y-positions for rows.
+    const keyMap: Record<string, GoFishNode> = {};
+    colKeys?.forEach((k, j) => {
+      const c = children[j];
+      if (c instanceof GoFishNode) keyMap[k] = c;
+    });
+    rowKeys?.forEach((k, i) => {
+      const c = children[i * numCols];
+      if (c instanceof GoFishNode) keyMap[k] = c;
+    });
+    node._ordinalKeyMap = keyMap;
+
+    return node;
   }
 );
 

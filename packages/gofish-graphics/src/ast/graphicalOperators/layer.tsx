@@ -10,8 +10,8 @@ import {
   isSIZE,
 } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
-import { computeSize } from "../../util";
-import { computePosScale, continuous } from "../domain";
+import { computeSize, foldFinite } from "../../util";
+import { posScaleFromSpace } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { createNodeOperatorSequential } from "../withGoFish";
@@ -283,45 +283,26 @@ export const layer = createNodeOperatorSequential(
 
           // `position` constraints with a datum coordinate contribute a data
           // domain on their axis (see collectPositionDomains); the union is what
-          // those constraints resolve against.
+          // those constraints resolve against. `ownsAxis` is consumed again by
+          // the per-child posScale forwarding below (`childScalesFor`).
           const constraintDomains = collectPositionDomains(node.constraints);
-          const ownsPositionAxis =
-            constraintDomains.x !== undefined ||
-            constraintDomains.y !== undefined;
-
-          // Children are NOT given the position scale on an axis this layer's
-          // own `position` constraints own: that scale resolves the constraints
-          // (a data→pixel map for the constrained marks), but the layer's other
-          // children are plain SIZE/aligned content with no data coordinate. A
-          // posScale leaking into e.g. a SIZE `spread` would make its alignment
-          // pass treat the children as data-positioned and skip placing them.
-          const childPosScales: ConstraintPosScales = [
-            constraintDomains.x !== undefined ? undefined : posScales[0],
-            constraintDomains.y !== undefined ? undefined : posScales[1],
+          const ownsAxis: [boolean, boolean] = [
+            constraintDomains.x !== undefined,
+            constraintDomains.y !== undefined,
           ];
+          const ownsPositionAxis = ownsAxis[0] || ownsAxis[1];
 
           // Scale for resolving this layer's datum `position` constraints: an
           // inherited posScale, else a local one mapping the layer's own
-          // POSITION domain onto its pixel size (mirrors scatter.tsx's fallback).
-          // Only built when the layer actually owns such an axis — it is used
-          // solely by applyConstraints below, not passed to children.
+          // POSITION domain onto its pixel size (the shared fallback recipe,
+          // `posScaleFromSpace` — scatter uses the same one). Only built when
+          // the layer actually owns such an axis — it is used solely by
+          // applyConstraints below, not passed to children.
           const space = node._underlyingSpace;
-          const fallbackPosScale = (dim: 0 | 1) => {
-            const s = space?.[dim];
-            return s && isPOSITION(s) && s.domain
-              ? computePosScale(
-                  continuous({
-                    value: [s.domain.min!, s.domain.max!],
-                    measure: "unit",
-                  }),
-                  size[dim]
-                )
-              : undefined;
-          };
           const effectivePosScales: ConstraintPosScales = ownsPositionAxis
             ? [
-                posScales[0] ?? fallbackPosScale(0),
-                posScales[1] ?? fallbackPosScale(1),
+                posScales[0] ?? posScaleFromSpace(space?.[0], size[0]),
+                posScales[1] ?? posScaleFromSpace(space?.[1], size[1]),
               ]
             : [posScales[0], posScales[1]];
 
@@ -336,15 +317,60 @@ export const layer = createNodeOperatorSequential(
               ? getPositioningConstraintRefs(node.constraints)
               : new Set<string>();
 
+          // Per-AXIS targets of `position` constraints (e.g. axis ticks pinned
+          // via `Constraint.position({ y: datum(v) })`). Tracked per axis, not
+          // per child: a child pinned on one axis may still need the scale on
+          // the other (an axis line position-seated on its cross axis resolves
+          // its own-axis datum endpoints through the scale).
+          const positionTargetDims = new Map<string, Set<0 | 1>>();
+          for (const c of node.constraints) {
+            if (c.type === "position") {
+              for (const r of c.children) {
+                if (!r) continue;
+                const dims = positionTargetDims.get(r.name) ?? new Set();
+                if (c.x !== undefined) dims.add(0);
+                if (c.y !== undefined) dims.add(1);
+                positionTargetDims.set(r.name, dims);
+              }
+            }
+          }
+
+          // Per-child posScales on the axes this layer owns. The blanket
+          // suppression of a layer-owned axis is too coarse for elaborated axes:
+          // the wrapped *content* may be POSITION (e.g. a scatter) and genuinely
+          // needs the shared scale, while the *ticks* (position-constraint
+          // targets) and any SIZE content must not get it (a posScale leaking
+          // into a SIZE spread makes its alignment skip placing children). So on
+          // an owned axis, forward `effectivePosScales` only to a non-target
+          // child whose own space on that axis is POSITION; otherwise suppress.
+          const childScalesFor = (
+            i: number,
+            targetDims: Set<0 | 1> | undefined
+          ): ConstraintPosScales => {
+            const sp = (children[i] as GoFishNode)._underlyingSpace;
+            const pick = (dim: 0 | 1) => {
+              if (!ownsAxis[dim]) return posScales[dim]; // inherited, unchanged
+              if (targetDims?.has(dim)) return undefined; // placed by the constraint
+              return sp && isPOSITION(sp[dim])
+                ? effectivePosScales[dim]
+                : undefined;
+            };
+            return [pick(0), pick(1)];
+          };
+
           for (let i = 0; i < children.length; i++) {
             const child = children[i];
+            const childName = childNameKey(node.children[i]);
+            const targetDims =
+              childName !== undefined
+                ? positionTargetDims.get(childName)
+                : undefined;
             const childPlaceable = child.layout(
               size,
               scaleFactors,
-              childPosScales,
+              childScalesFor(i, targetDims),
               posDomains
             );
-            const childName = childNameKey(node.children[i]);
             if (!childName || !constrainedNames.has(childName)) {
               childPlaceable.place("x", 0, "baseline");
               childPlaceable.place("y", 0, "baseline");
@@ -396,26 +422,23 @@ export const layer = createNodeOperatorSequential(
             }
           }
 
-          // Calculate the bounding box of all children
-          const minX = Math.min(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[0].min!
-            )
+          // Calculate the bounding box of all children (NaN-safe; see
+          // foldFinite for why undefined extents are skipped).
+          const minX = foldFinite(
+            childPlaceables.map((cp) => cp.dims[0].min),
+            Math.min
           );
-          const maxX = Math.max(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[0].max!
-            )
+          const maxX = foldFinite(
+            childPlaceables.map((cp) => cp.dims[0].max),
+            Math.max
           );
-          const minY = Math.min(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[1].min!
-            )
+          const minY = foldFinite(
+            childPlaceables.map((cp) => cp.dims[1].min),
+            Math.min
           );
-          const maxY = Math.max(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[1].max!
-            )
+          const maxY = foldFinite(
+            childPlaceables.map((cp) => cp.dims[1].max),
+            Math.max
           );
 
           const scaleX = options.transform?.scale?.x ?? 1;
