@@ -1,4 +1,4 @@
-import { sumBy, v, Connect, ref } from "../../lib";
+import { sumBy, v, Connect } from "../../lib";
 import { GoFishNode } from "../_node";
 import type { Value } from "../data";
 import { GoFishRef } from "../_ref";
@@ -32,9 +32,9 @@ export type { Mark, Operator };
 export { generatedRect as rect };
 export type { LayerContext };
 
-import { ChartBuilder, LayerSelector, chart } from "./chartBuilder";
+import { ChartBuilder, chart } from "./chartBuilder";
 import type { ChartOptions } from "./chartBuilder";
-export { ChartBuilder, LayerSelector, chart };
+export { ChartBuilder, chart };
 export type { ChartOptions };
 
 /* Data Transformation Operators */
@@ -155,32 +155,36 @@ export function circle<T extends Record<string, any>>({
   return result;
 }
 
-// select() returns a lazy selector that defers layer lookup until actually needed
-// This allows layers to be registered by .name() on marks before select() tries to access them
-export function select<T>(layerName: string): LayerSelector<T> {
-  return new LayerSelector<T>(layerName);
+// `ref(name)` is the universal singular reference — usable inline in a layout
+// (resolved at layout time) and as chart data (resolved at build time against
+// the per-chart layer registry, erroring unless exactly one named node
+// matches). `selectAll(name)` is the plural form: one ref per matching named
+// node, chart-data only. Both defer layer lookup until resolution, so layers
+// can be registered by `.name()` on marks before the selector accesses them.
+export function selectAll(
+  layerName: string
+): GoFishRef & { readonly multiplicity: "all" } {
+  return new GoFishRef({
+    selection: layerName,
+    multiplicity: "all",
+  }) as GoFishRef & {
+    readonly multiplicity: "all";
+  };
 }
 
 // line() mark connects data points using center-to-center mode
-export function line<T extends Record<string, any>>(options?: {
+export function line(options?: {
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
   interpolation?: "linear" | "bezier";
-}): Mark<Array<T & { __ref?: GoFishNode }>> {
-  const mark: Mark<Array<T & { __ref?: GoFishNode }>> = async (
-    d: Array<T & { __ref?: GoFishNode }>,
-    key?: string | number,
+}): Mark<GoFishRef[]> {
+  const mark: Mark<GoFishRef[]> = async (
+    d: GoFishRef[],
+    _key?: string | number,
     _layerContext?: LayerContext
   ) => {
-    // Use refs from enriched data (lazy resolution via __ref)
-    const refs = d.map((item) => {
-      if ("__ref" in item && item.__ref) {
-        return ref(item.__ref);
-      }
-      throw new Error("line mark expected __ref on items");
-    });
-
+    // `selectAll(...)` resolves to one ref per named node; connect them.
     return Connect(
       {
         direction: 0, // x direction
@@ -190,7 +194,7 @@ export function line<T extends Record<string, any>>(options?: {
         opacity: options?.opacity,
         interpolation: options?.interpolation ?? "linear",
       },
-      refs
+      d
     );
   };
   (mark as any).__serialize = { type: "line", opts: options ?? {} };
@@ -198,27 +202,20 @@ export function line<T extends Record<string, any>>(options?: {
 }
 
 // area() mark connects data points using edge-to-edge mode
-export function area<T extends Record<string, any>>(options?: {
+export function area(options?: {
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
   interpolation?: "linear" | "bezier";
-}): Mark<Array<T & { __ref?: GoFishNode }>> {
-  const mark: Mark<Array<T & { __ref?: GoFishNode }>> = async (
-    d: Array<T & { __ref?: GoFishNode }>,
-    key?: string | number,
+}): Mark<GoFishRef[]> {
+  const mark: Mark<GoFishRef[]> = async (
+    d: GoFishRef[],
+    _key?: string | number,
     _layerContext?: LayerContext
   ) => {
-    // Use refs from enriched data (lazy resolution via __ref)
-    const refs = d.map((item) => {
-      if ("__ref" in item && item.__ref) {
-        return ref(item.__ref);
-      }
-      throw new Error("area mark expected __ref on items");
-    });
-
+    // `selectAll(...)` resolves to one ref per named node; connect them.
     return Connect(
       {
         direction: options?.dir ?? "x",
@@ -229,7 +226,7 @@ export function area<T extends Record<string, any>>(options?: {
         opacity: options?.opacity,
         interpolation: options?.interpolation ?? "bezier",
       },
-      refs
+      d
     );
   };
   (mark as any).__serialize = { type: "area", opts: options ?? {} };
@@ -447,11 +444,12 @@ export function layer<T>(
   const opts = Array.isArray(marksOrOpts) ? {} : marksOrOpts;
   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
   const base: Mark<T> = async (d, key, layerContext) => {
-    // Share one layerContext across all children so that select(name) in
-    // one child can find a sibling's .name(name) registration. Inherit from
-    // the caller when present (nested-layer case), else create a fresh
-    // context (top-level .render() case). Resolve sequentially so a child
-    // using select(...) sees registrations from earlier siblings.
+    // Share one layerContext across all children so that ref(name)/
+    // selectAll(name) in one child can find a sibling's .name(name)
+    // registration. Inherit from the caller when present (nested-layer case),
+    // else create a fresh context (top-level .render() case). Resolve
+    // sequentially so a child referencing a name sees registrations from
+    // earlier siblings.
     const sharedContext = layerContext ?? {};
     const resolved: GoFishNode[] = [];
     for (const m of marks) {

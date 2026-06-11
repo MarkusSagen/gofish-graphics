@@ -12,7 +12,7 @@
 import {
   Chart,
   Layer,
-  select,
+  selectAll,
   spread,
   stack,
   scatter,
@@ -54,6 +54,7 @@ import {
   type Mark,
   type Token,
 } from "gofish-graphics";
+import { Frontend } from "gofish-ir";
 
 // Combinator-form factory map. Each entry takes (opts, marks) and returns
 // a Mark. JS storybook uses these directly via the dual-mode operator
@@ -86,10 +87,9 @@ const COMBINATOR_FACTORIES: Record<
 // Types
 // ---------------------------------------------------------------------------
 
-interface SelectDataSpec {
-  type: "select";
-  layer: string;
-}
+// Derived from the canonical frontend-IR schema rather than re-declared, so the
+// harness can't drift from the `{ type: "select" }` arm of `Frontend.DataIR`.
+type SelectDataSpec = Extract<Frontend.DataIR, { type: "select" }>;
 
 interface ChartHarnessSpec {
   data: Record<string, any>[] | SelectDataSpec | null;
@@ -628,7 +628,8 @@ function resolveOptions(
 
 /**
  * Build a single ChartBuilder from a chart spec, resolving select-data
- * references via `select(layerName)` like the widget bundle does.
+ * references via `ref(layerName)` / `selectAll(layerName)` like the widget
+ * bundle does.
  */
 function buildChartFromSpec(
   chartSpec: ChartHarnessSpec,
@@ -645,12 +646,14 @@ function buildChartFromSpec(
 
   // Unwrap the canonical DataIR shapes. The wire formats are:
   //   - { type: "inline", rows: [...] } → use the rows directly
-  //   - { type: "select", layer: name } → resolve via a LayerSelector
+  //   - { type: "select", layer: name, mode } → resolve against the layer
+  //     registry: mode "all" → selectAll(layer), otherwise → ref(layer)
   //   - null / array (legacy) → treat as bare rows
   let chartData: any = chartSpec.data;
   if (chartData && typeof chartData === "object" && !Array.isArray(chartData)) {
     if ((chartData as SelectDataSpec).type === "select") {
-      chartData = select((chartData as SelectDataSpec).layer);
+      const sel = chartData as SelectDataSpec;
+      chartData = sel.mode === "all" ? selectAll(sel.layer) : ref(sel.layer);
     } else if ((chartData as any).type === "inline") {
       chartData = (chartData as any).rows;
     }

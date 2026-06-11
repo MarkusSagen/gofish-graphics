@@ -48,6 +48,13 @@ export { bin } from "./ast/transforms";
 // Shapes
 export { ref } from "./ast/shapes/ref";
 
+// Datum projection — `pluck(ref, "species")` returns the full set of distinct
+// values for a field across a selected node's rows ("every possible value"),
+// the un-collapsed sibling of the `by: "datum.field"` homogeneity collapse.
+// (`projectPath`/`splitKeyFn` stay module-internal — operators import them from
+// ./ast/datumProjection directly.)
+export { pluck } from "./ast/datumProjection";
+
 // Constraints
 export { Constraint } from "./ast/constraints";
 export type {
@@ -112,7 +119,7 @@ export {
   derive,
   rect,
   circle,
-  select,
+  selectAll,
   line,
   blank,
   area,

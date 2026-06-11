@@ -56,6 +56,13 @@ export class GoFishRef {
   public _name?: string | Token;
   public parent?: GoFishNode;
 
+  // undefined/"one" = a singular reference; "all" = a plural chart-data
+  // selection (created by `selectAll`, consumed at chart-build time).
+  // Assigned unconditionally in the constructor so the key is always an own
+  // key — RESERVED_KEYS in shapes/ref.tsx is derived from Reflect.ownKeys of
+  // a sample instance and must see it regardless of field-init config.
+  public readonly multiplicity?: "one" | "all";
+
   private intrinsicDims?: Dimensions;
   /** @internal Layout-pass state. Public to match GoFishNode.transform so
    *  `(node as GoFishAST).transform` resolves on the union; external callers
@@ -63,7 +70,7 @@ export class GoFishRef {
   public transform?: Transform;
   public shared: Size<boolean>;
   private measurement!: (scaleFactors: Size) => Size;
-  private selection?: string | Token | (Token | string | number)[];
+  public readonly selection?: string | Token | (Token | string | number)[];
   private directNode?: GoFishNode;
   private selectedNode?: GoFishNode;
   private renderSession?: RenderSession;
@@ -73,11 +80,13 @@ export class GoFishRef {
     selection,
     node,
     shared = [false, false],
+    multiplicity,
   }: {
     name?: string | Token;
     selection?: string | Token | (Token | string | number)[];
     node?: GoFishNode;
     shared?: Size<boolean>;
+    multiplicity?: "one" | "all";
   }) {
     if (selection === undefined && !node) {
       throw new Error("Ref must have either selection or node");
@@ -86,6 +95,21 @@ export class GoFishRef {
     this.shared = shared;
     this.selection = selection;
     this.directNode = node;
+    this.multiplicity = multiplicity;
+  }
+
+  /** The raw datum carried by the node this ref points at — the *bag of rows*
+   * that flowed into the node (the operator pipeline binds this as an array;
+   * a fully-split leaf is a 1-row bag). Reads `directNode` first because
+   * `split` runs before layout/resolveNames (when only `directNode` is set);
+   * falls back to the resolved `selectedNode`.
+   *
+   * This is intentionally the *uncollapsed* bag: `sumBy(ref.datum, "count")`
+   * aggregates over the rows. Field access with homogeneity collapse (so
+   * `by: "datum.lake"` resolves to a scalar when the rows agree) lives in
+   * `projectPath` / `pluck` (see datumProjection.ts), not here. */
+  public get datum(): any {
+    return (this.directNode ?? this.selectedNode)?.datum;
   }
 
   /** Chainable: name this ref so a layer constraint can reference it (mirrors
@@ -96,6 +120,11 @@ export class GoFishRef {
   }
 
   public resolveNames(): void {
+    if (this.multiplicity === "all") {
+      throw new Error(
+        'selectAll(...) cannot be used inline in a layout; pass it as chart data: Chart(selectAll("name"))'
+      );
+    }
     if (this.directNode) {
       this.selectedNode = this.directNode;
     } else if (this.selection !== undefined) {
@@ -362,23 +391,50 @@ export class GoFishRef {
 }
 
 /**
+ * The component-boundary visibility rule, in one place. Yields `root` and every
+ * hygienically-visible descendant in DFS parent-iteration (pre-order): it
+ * descends into ordinary children, and *visits* a `_isComponent` child (it is
+ * itself visible) but does NOT descend into its subtree — so names don't leak
+ * across component boundaries.
+ *
+ * This is the single home for the bounded walk shared by `findInComponent`
+ * (ref/selectAll string lookup, below) and `collectLayerRegistrations`
+ * (chartBuilder.ts layer registry). Keeping them on one walk is what guarantees
+ * a name is reachable by `ref`/`selectAll` exactly when it's registered as a
+ * layer — the two can't drift.
+ */
+export function* visibleNodes(root: GoFishNode): Generator<GoFishNode> {
+  yield root;
+  for (const child of root.children ?? []) {
+    if (!(child instanceof GoFishNode)) continue;
+    if (child._isComponent) {
+      // Visible (a leaf component, e.g. a createMark `rect`, can carry a name)
+      // but a boundary: don't descend into it.
+      yield child;
+    } else {
+      yield* visibleNodes(child);
+    }
+  }
+}
+
+/**
  * DFS for a descendant of `node` whose `_name` (or token `__tag`) matches
  * `name`, without crossing `_isComponent` boundaries. The match is checked
  * before the descent guard so a leaf component (e.g. a `rect` produced by
  * createMark, which is itself a component) is still findable by name.
+ *
+ * The bounded traversal is `visibleNodes` above; `node` itself is the search
+ * root and is never a match target, only its visible descendants.
  */
 const findInComponent = (
   node: GoFishNode,
   name: string
 ): GoFishNode | undefined => {
-  for (const child of node.children) {
-    if (!(child instanceof GoFishNode)) continue;
-    const n = child._name;
+  for (const candidate of visibleNodes(node)) {
+    if (candidate === node) continue;
+    const n = candidate._name;
     const tag = n === undefined ? undefined : isToken(n) ? n.__tag : n;
-    if (tag === name) return child;
-    if (child._isComponent) continue;
-    const inner = findInComponent(child, name);
-    if (inner) return inner;
+    if (tag === name) return candidate;
   }
   return undefined;
 };

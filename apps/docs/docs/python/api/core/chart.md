@@ -21,13 +21,13 @@ chart(data, **options) -> ChartBuilder
 
 ## Parameters
 
-| Parameter | Type                        | Description                                                                              |
-| --------- | --------------------------- | ---------------------------------------------------------------------------------------- |
-| `data`    | `list[dict]` \| `DataFrame` | The dataset to visualize, or [`select()`](#cross-chart-references) for a layer reference |
-| `axes`    | keyword                     | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                        |
-| `coord`   | keyword                     | Coordinate transform, e.g. `coord=clock()`                                               |
-| `color`   | keyword                     | Color scale applied to all marks — `palette(...)` or `gradient(...)`                     |
-| `padding` | keyword                     | Extra SVG padding (px) — useful for polar charts and overflowing labels                  |
+| Parameter | Type                        | Description                                                                                           |
+| --------- | --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `data`    | `list[dict]` \| `DataFrame` | The dataset to visualize, or [`selectAll()` / `ref()`](#cross-chart-references) for a layer reference |
+| `axes`    | keyword                     | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                     |
+| `coord`   | keyword                     | Coordinate transform, e.g. `coord=clock()`                                                            |
+| `color`   | keyword                     | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                  |
+| `padding` | keyword                     | Extra SVG padding (px) — useful for polar charts and overflowing labels                               |
 
 Chart-level options are passed as keyword arguments:
 
@@ -94,5 +94,16 @@ chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
 
 ## Cross-chart references
 
-Pass `select("layerName")` as the data argument to reference a named mark from
-another chart. See [`mark`](/python/api/core/mark) for `.name()`.
+Pass `selectAll("layerName")` as the data argument to reference a named mark from
+another chart — it resolves to an **array of refs**, one per named node, which
+connectors like [`line`](/python/api/marks/line) and [`area`](/python/api/marks/area)
+consume directly. Use `ref("layerName")` as data for the singular case: it returns a
+**single ref** and raises if the layer matched zero or more than one node.
+
+After a selection the stream is refs, so re-encode with a datum path —
+`group(by="datum.species")`; see
+[`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by). See
+[`mark`](/python/api/core/mark) for `.name()`.
+
+For the full reference — singular-as-data rules, node-unit selection, hygienic
+scoping, and connector use — see [`ref` / `selectAll`](/python/api/selection/ref).

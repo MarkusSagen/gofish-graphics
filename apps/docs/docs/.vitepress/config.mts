@@ -298,7 +298,12 @@ export default defineConfig({
             {
               text: "Selection",
               collapsed: true,
-              items: [{ text: "select", link: "/js/api/selection/select" }],
+              items: [
+                {
+                  text: "ref / selectAll",
+                  link: "/js/api/selection/ref",
+                },
+              ],
             },
             {
               text: "Coordinates",
@@ -373,6 +378,16 @@ export default defineConfig({
                 {
                   text: "constrain",
                   link: "/python/api/constraints/constrain",
+                },
+              ],
+            },
+            {
+              text: "Selection",
+              collapsed: true,
+              items: [
+                {
+                  text: "ref / selectAll",
+                  link: "/python/api/selection/ref",
                 },
               ],
             },

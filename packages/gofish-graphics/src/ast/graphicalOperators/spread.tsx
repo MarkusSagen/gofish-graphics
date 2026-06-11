@@ -10,6 +10,7 @@ import {
   Size,
 } from "../dims";
 import { Collection } from "lodash";
+import { SplitBy, splitKeyFn } from "../datumProjection";
 import { computeAesthetic, computeSize, foldFinite } from "../../util";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
@@ -489,7 +490,7 @@ export const Spread = createNodeOperator(
 );
 
 export type SpreadOptions<T = any> = {
-  by?: keyof T & string;
+  by?: SplitBy;
   dir: "x" | "y";
   spacing?: number;
   alignment?: "start" | "middle" | "end" | "baseline";
@@ -510,10 +511,10 @@ export const spread = createOperator<any, SpreadOptions>(Spread, {
   // arrays (e.g. after `_.chunk(...)`) or scalars; the downstream mark
   // normalizes either form internally.
   split: ({ by }, d) =>
-    by ? Map.groupBy(d, (r: any) => r[by]) : new Map(d.map((r, i) => [i, r])),
+    by ? Map.groupBy(d, splitKeyFn(by)) : new Map(d.map((r, i) => [i, r])),
   channels: { w: "size", h: "size" },
   axisFields: ({ by, dir }) =>
-    by ? (dir === "x" ? { x: by } : { y: by }) : undefined,
+    typeof by === "string" ? (dir === "x" ? { x: by } : { y: by }) : undefined,
   serialize: { type: "spread" },
 });
 

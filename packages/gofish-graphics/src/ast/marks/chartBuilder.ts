@@ -4,8 +4,10 @@ import { type ColorConfig } from "../colorSchemes";
 import type { AxesOptions } from "../gofish";
 import { Mark, Operator } from "../types";
 import { Frame } from "../graphicalOperators/frame";
+import { GoFishRef, visibleNodes } from "../_ref";
+import { ref } from "../shapes/ref";
 
-/** Per-chart registry of named layers for select() lookup. */
+/** Per-chart registry of named layers for ref()/selectAll() lookup. */
 export type LayerContext = {
   [name: string]: {
     data: any[];
@@ -69,11 +71,18 @@ export type ChartOptions = {
  * array via `Promise.all(...)` whose return preserves input order, so a
  * DFS over the resulting tree is the same canonical order we'd get from
  * sequential rendering, without paying for serialized awaits.
+ *
+ * Layer names follow the same component-boundary hygiene as ref/selectAll:
+ * names registered *inside* a `createMark` component (a child with
+ * `_isComponent === true`) are internal to that component and not selectable
+ * from outside. Both this registry and `findInComponent` ride the single
+ * bounded walk `visibleNodes` in _ref.tsx, so a name is registerable here
+ * exactly when it's findable by ref — the walk does not descend into a
+ * component child's subtree, but the component child's OWN
+ * `__layerRegistration` is still registered (a leaf component, e.g. a `rect`
+ * produced by createMark, can itself carry a name).
  */
-function collectLayerRegistrations(
-  node: GoFishNode,
-  layerContext: LayerContext
-): void {
+function registerLayerNode(node: GoFishNode, layerContext: LayerContext): void {
   const layerName = (node as { __layerRegistration?: string })
     .__layerRegistration;
   if (layerName) {
@@ -86,45 +95,62 @@ function collectLayerRegistrations(
     // otherwise re-push the same node.
     (node as { __layerRegistration?: string }).__layerRegistration = undefined;
   }
-  for (const child of node.children ?? []) {
-    if (child instanceof GoFishNode) {
-      collectLayerRegistrations(child, layerContext);
-    }
+}
+
+function collectLayerRegistrations(
+  node: GoFishNode,
+  layerContext: LayerContext
+): void {
+  for (const n of visibleNodes(node)) {
+    registerLayerNode(n, layerContext);
   }
 }
 
-/** A lazy selector that defers layer lookup until actually needed. */
-export class LayerSelector<T = any> {
-  constructor(public readonly layerName: string) {}
-
-  resolve(layerContext: LayerContext): Array<T & { __ref: GoFishNode }> {
-    const layer = layerContext[this.layerName];
-
-    if (!layer) {
-      throw new Error(
-        `Layer "${this.layerName}" not found. Make sure to call .name("${this.layerName}") on the mark first.`
-      );
+/**
+ * Resolve a `GoFishRef` used as chart data against the layer registry, the
+ * node-unit way: NO flattening of array data, NO datum spreading, NO `__ref`
+ * on plain objects.
+ *
+ * - A non-string selection (token / path-array / node-backed ref) is a direct
+ *   reference: it passes through unchanged as a single ref (and `selectAll`
+ *   over one is an error — it requires a string layer name).
+ * - A string selection looks up the named layer. `multiplicity === "all"`
+ *   (from `selectAll`) yields the full `GoFishRef[]`; the singular form yields
+ *   the one matching `GoFishRef`, throwing if the layer matched zero or more
+ *   than one node.
+ */
+function resolveRefData(
+  r: GoFishRef,
+  layerContext: LayerContext
+): GoFishRef | GoFishRef[] {
+  if (typeof r.selection !== "string") {
+    if (r.multiplicity === "all") {
+      throw new Error("selectAll requires a string layer name");
     }
-
-    const resolvedNodes: GoFishNode[] = layer.nodes;
-
-    // Return node-attached data enriched with refs to nodes.
-    // Option 3: flatten arrays and duplicate __ref per underlying datum.
-    const result = resolvedNodes.flatMap((node: GoFishNode) => {
-      const datum: any = (node as any).datum;
-
-      if (!Array.isArray(datum) && typeof datum !== "object") {
-        throw new Error("datum must be an array or object");
-      }
-      const arr = Array.isArray(datum) ? datum : [datum];
-
-      return arr.map((item: any) => ({
-        ...(item as object),
-        __ref: node,
-      })) as Array<T & { __ref: GoFishNode }>;
-    });
-    return result;
+    return r;
   }
+
+  const layer = layerContext[r.selection];
+  if (!layer) {
+    throw new Error(
+      `Layer "${r.selection}" not found. Make sure to call .name("${r.selection}") on the mark first.`
+    );
+  }
+
+  const refs = layer.nodes.map((node) => ref({ __ref: node }));
+
+  if (r.multiplicity === "all") return refs;
+
+  // Singular: exactly one node expected.
+  if (refs.length === 0) {
+    throw new Error(`ref("${r.selection}") matched no nodes.`);
+  }
+  if (refs.length > 1) {
+    throw new Error(
+      `ref("${r.selection}") matched ${refs.length} nodes; use selectAll("${r.selection}").`
+    );
+  }
+  return refs[0];
 }
 
 export class ChartBuilder<TInput, TOutput = TInput> {
@@ -227,10 +253,10 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       composedMark = await op(composedMark);
     }
 
-    // Resolve LayerSelector just before calling mark
+    // Resolve a ref/selectAll used as chart data just before calling mark
     let data = this.data;
-    if (data instanceof LayerSelector) {
-      data = data.resolve(this.layerContext) as any;
+    if (data instanceof GoFishRef) {
+      data = resolveRefData(data, this.layerContext) as any;
     }
 
     // Create the node; named marks tag themselves for the post-resolve
@@ -317,6 +343,15 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   }
 }
 
+// `selectAll(...)` is typed as a single `GoFishRef` but resolves, as chart
+// data, to the full `GoFishRef[]` (one ref per matching named node). This
+// overload teaches the builder that plural-ref data flows downstream as an
+// array, so `Chart(selectAll("bars"))` typechecks without a cast.
+export function chart(
+  data: GoFishRef & { multiplicity: "all" },
+  options?: ChartOptions
+): ChartBuilder<GoFishRef[], GoFishRef[]>;
+export function chart<T>(data: T, options?: ChartOptions): ChartBuilder<T, T>;
 export function chart<T>(data: T, options?: ChartOptions): ChartBuilder<T, T> {
   return new ChartBuilder<T, T>(data, options, [], undefined, {});
 }
