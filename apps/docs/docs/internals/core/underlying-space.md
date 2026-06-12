@@ -382,6 +382,54 @@ This dispatch is the practical embodiment of the underlying-space-kind
 distinction. It also happens to make the rendering pipeline more readable:
 once you know the kind, you know which arithmetic applies.
 
+## Scales generalize flex factors
+
+A size scale whose range resolves to the parent's extent is doing exactly
+what CSS flexbox does with `flex` factors — and GoFish's version is strictly
+more general.
+
+In flexbox, `flex: 1` and `flex: 2` on two children split the container's
+space in a 1:2 ratio. The numbers are weights; the container's extent is the
+range; the layout normalizes the weights to fill it. That is a scale,
+narrowly construed: a domain (the sibling weights) mapped onto a range (the
+container box) so the pieces sum to the whole.
+
+This is precisely SIZE resolution. A row of `datum(n)`-sized children under a
+shared size scale composes into a Monotonic whose inverse against the
+available extent solves for the scale factor that makes the siblings fill it
+(see [Layout dispatch](#layout-dispatch)). `space.domain.inverse(size)` is
+the normalization step; the `datum(n)` weights are the flex factors. The
+`cut` operator's relative form, `cut(source, { size: [datum(1), datum(2)] })`,
+slices a region in a 1:2 ratio by normalizing those weights over the source's
+extent — flexbox, expressed as data.
+
+So flex factors are the **degenerate case** of a size scale: weights that
+happen to be literal layout constants rather than data. GoFish generalizes
+them along three axes the CSS model can't reach:
+
+- **The weights can be data.** `datum(n)` is a literal weight, but the same
+  machinery takes a field name (`rect({ h: "count" })`) so the proportions
+  come from the rows, not the spec.
+- **The scale can be shared.** A `flex` factor is local to one container; a
+  GoFish size scale can be shared across sibling charts or facets, so the same
+  weight means the same pixels everywhere it appears — proportions that
+  compose across the page, not just within one box.
+- **Absolute sizing coexists.** Flexbox bolts `flex-basis` / fixed widths
+  alongside the factors as a separate mechanism. GoFish folds both into one
+  field/datum/literal trichotomy (issue #266): a literal `10` is absolute
+  pixels, `datum(n)` is a relative weight, a field name is a per-row weight.
+  Mixing the two in one `cut` is not a conflict but exactly flex resolution:
+  the absolutes are fixed-basis claims, and the size scale's _range_ is the
+  parent extent **minus** those fixed claims, so the `datum(n)` weights
+  normalize over the remainder — `cut(source, { size: [100, datum(1), datum(2)] })`
+  fixes a 100px cap and splits what's left 1:2. The mixed case makes the
+  identification sharper, not weaker: "fixed widths next to flex items" is just
+  a size scale whose range has been shortened by the fixed children.
+
+The payoff is conceptual economy: "fill the container proportionally" is not
+a bespoke layout mode, it is what a size scale already does once its range is
+the parent's extent.
+
 ## Self-scaling regions: an explicit pixel size absorbs an axis
 
 The root resolves its scales against the canvas: POSITION → a posScale onto

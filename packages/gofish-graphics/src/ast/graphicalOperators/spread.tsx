@@ -397,9 +397,11 @@ export type SpreadOptions<T = any> = {
 };
 
 export const spread = createOperator<any, SpreadOptions>(Spread, {
-  // When no `by` is given, pass each item through as-is. Items may already be
-  // arrays (e.g. after `_.chunk(...)`) or scalars; the downstream mark
-  // normalizes either form internally.
+  // With `by`: groupBy on the field. Without `by`: identity split — one leaf
+  // per row (the waffle grid relies on this to spread chunked sub-arrays).
+  // Expand-kind marks (e.g. `cut`) need the whole array in one leaf instead;
+  // that override lives in createOperator (it dispatches on the mark's kind),
+  // not here, so this split stays kind-agnostic.
   split: ({ by }, d) =>
     by ? Map.groupBy(d, splitKeyFn(by)) : new Map(d.map((r, i) => [i, r])),
   channels: { w: "size", h: "size" },
