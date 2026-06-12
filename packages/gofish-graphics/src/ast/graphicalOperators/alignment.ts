@@ -183,9 +183,11 @@ export function resolveAlignmentSpace(
 /**
  * Align children on a single axis using spread-style semantics. Thin wrapper
  * over the shared `alignTargets` walk (see `constraints/align.ts`) supplying
- * spread's baseline policy: a `"baseline"` anchor pins to 0, and an unplaced
- * fallback resolves to the data scale's origin (`posScale(0)`) rather than the
- * layer box.
+ * spread's `readPlaced` reader (a `"baseline"` anchor pins to 0 and missing
+ * extents are tolerated). The no-sibling fallback is the shared
+ * space-kind-dispatched rule (`alignFallbackBaseline`): a scaled (posScale)
+ * axis falls back to the scale origin `posScale(0)`, a pixel-pure axis to the
+ * layer-box edge.
  *
  * Guard: when children already have data-driven positions via posScale
  * (fromSize is false and alignment !== "middle"), skip — the children
@@ -204,16 +206,20 @@ export function alignChildren(
   if (posScale && !fromSize && alignment !== "middle") return;
 
   const anchors = new Array<AlignAnchor>(children.length).fill(alignment);
-  alignTargets(children, axis === 0 ? "x" : "y", anchors, {
-    readPlaced: (child, idx, a) =>
-      a === "baseline"
-        ? 0
-        : a === "start"
-          ? (child.dims[idx].min ?? 0)
-          : a === "middle"
-            ? (child.dims[idx].center ?? child.dims[idx].min ?? 0)
-            : (child.dims[idx].max ?? child.dims[idx].min ?? 0),
-    fallback: (as) =>
-      as[0] === "middle" ? size / 2 : posScale ? posScale(0) : 0,
-  });
+  alignTargets(
+    children,
+    axis === 0 ? "x" : "y",
+    anchors,
+    {
+      readPlaced: (child, idx, a) =>
+        a === "baseline"
+          ? 0
+          : a === "start"
+            ? (child.dims[idx].min ?? 0)
+            : a === "middle"
+              ? (child.dims[idx].center ?? child.dims[idx].min ?? 0)
+              : (child.dims[idx].max ?? child.dims[idx].min ?? 0),
+    },
+    { size, posScale }
+  );
 }
