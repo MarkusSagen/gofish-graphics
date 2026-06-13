@@ -28,6 +28,9 @@ import {
   nestedSpace,
   getPositioningConstraintRefs,
   isNestConstraint,
+  isGridConstraint,
+  gridSpaces,
+  gridCellSize,
   isZOrderConstraint,
   type ConstraintPosScales,
   type ConstraintSpec,
@@ -513,6 +516,12 @@ export const layer = createNodeOperatorSequential(
           _shared: Size<boolean>,
           constraints
         ) => {
+          // A grid constraint makes this layer a grid: its axes are categorical
+          // (ORDINAL over columns / rows) and the cells fill flex tracks (sized
+          // in `layout`). It's exclusive — no union/nest/position fold applies.
+          const gridC = (constraints ?? []).find(isGridConstraint);
+          if (gridC !== undefined) return gridSpaces(gridC, _childNodes);
+
           // Apply layer's own transform.scale to any SIZE spaces produced
           // by unionChildSpaces (the SIZE-preserving overlay path).
           const scaleX = options.transform?.scale?.x ?? 1;
@@ -632,6 +641,12 @@ export const layer = createNodeOperatorSequential(
             computeSize(dims[1].size, scaleFactors?.[1]!, size[1]) ?? size[1],
           ];
 
+          // Grid budget: a grid layer is exclusively cells (table elaboration),
+          // and every cell fills its flex track — so all children get the equal
+          // track size (box-division); `applyGrid` then centers them.
+          const gridC = node.constraints.find(isGridConstraint);
+          const gridCell = gridC ? gridCellSize(gridC, size) : undefined;
+
           // Build the LOCAL scale for each self-scaled (stashed) dim against our
           // own pixel box — see selfScaledSpaces above. The recipe (cf. the
           // gofish.tsx root): POSITION → a posScale mapping the stashed domain
@@ -719,6 +734,8 @@ export const layer = createNodeOperatorSequential(
               })()
             : undefined;
           const childSizeFor = (childName: string | undefined): Size => {
+            // Grid is exclusive: every child is a cell, so all get the track size.
+            if (gridCell !== undefined) return gridCell;
             if (
               sliceByName === undefined ||
               childName === undefined ||
