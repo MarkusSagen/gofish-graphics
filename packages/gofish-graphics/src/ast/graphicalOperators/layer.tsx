@@ -11,6 +11,7 @@ import {
   SIZE,
   UNDEFINED,
   UnderlyingSpace,
+  isDIFFERENCE,
   isPOSITION,
   isSIZE,
   spaceMeasure,
@@ -618,6 +619,32 @@ export const layer = createNodeOperatorSequential(
             }
           }
 
+          // Fill in each spread-guarded align's per-axis `fromSize` from the
+          // PRE-fold child spaces (mirrors bespoke `resolveAlignmentSpace()
+          // .fromSize`). Consumed by `applyAlign`'s data-positioned guard
+          // (align.ts) so a posScale cross axis whose children carry their own
+          // data positions isn't pulled to the scale's `posScale(0)` fallback.
+          // Gated on a guarded align existing so the common case (every plain
+          // layer/table — `resolveUnderlyingSpace` is a hot path that can run
+          // more than once) skips the O(n) `buildNameIndex` build entirely.
+          if (
+            (constraints ?? []).some(
+              (c) => c.type === "align" && c.guardDataPositioned
+            )
+          ) {
+            const alignNameIdx = buildNameIndex(_childNodes);
+            for (const c of constraints ?? []) {
+              if (c.type !== "align" || !c.guardDataPositioned) continue;
+              const idxs = c.children
+                .map((r) => alignNameIdx.get(r.name))
+                .filter((i): i is number => i !== undefined);
+              const allSizeOn = (axis: 0 | 1): boolean =>
+                idxs.length > 0 &&
+                idxs.every((i) => isSIZE(effectiveChildren[i][axis]));
+              c.fromSize = [allSizeOn(0), allSizeOn(1)];
+            }
+          }
+
           // Stash the absorbed POSITION/SIZE space and report UNDEFINED upward
           // for any dim with an explicit pixel size — self-scaling region; see
           // selfScaledSpaces above. (last write wins — may run more than once.)
@@ -707,6 +734,32 @@ export const layer = createNodeOperatorSequential(
                   constraintBudget
                 );
             }
+          }
+
+          // `sharedScale` scale scope (claim hoisting, #549): on an axis this
+          // layer is a scope for (set by `spread`'s `sharedScale`; default
+          // [false,false] → no-op for every plain layer/table), solve σ locally
+          // from its composed claim against its own box and hand it to
+          // descendants via the FRESH array — the dispatch the bespoke spread
+          // used (computeScaleFactor): SIZE inverts, POSITION/DIFFERENCE divide
+          // by the domain/width.
+          for (const axis of [0, 1] as const) {
+            if (!shared[axis] || !Number.isFinite(size[axis])) continue;
+            const sp = selfScaledSpaces[axis] ?? node._underlyingSpace?.[axis];
+            if (sp === undefined) continue;
+            let sf: number | undefined;
+            if (isSIZE(sp)) {
+              sf =
+                sp.domain.inverse(size[axis], {
+                  upperBoundGuess: size[axis],
+                }) ?? 0;
+            } else if (isPOSITION(sp) && sp.domain) {
+              const w = Interval.width(sp.domain);
+              sf = w !== 0 ? size[axis] / w : 0;
+            } else if (isDIFFERENCE(sp)) {
+              sf = sp.width !== 0 ? size[axis] / sp.width : 0;
+            }
+            if (sf !== undefined) childScaleFactors[axis] = sf;
           }
 
           // Per-child proposed size for distribute-covered children: each
