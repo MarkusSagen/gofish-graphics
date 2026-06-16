@@ -4,8 +4,9 @@
 
 import * as Monotonic from "../../util/monotonic";
 import { GoFishNode } from "../_node";
+import { shadowCheckScaleRoot } from "../solver/shadow";
 import { isToken } from "../createName";
-import { Size, elaborateDims, FancyDims } from "../dims";
+import { Size, elaborateDims, FancyDims, displayTranslate } from "../dims";
 import {
   POSITION,
   SIZE,
@@ -344,9 +345,14 @@ function flattenForZOrder(children: GoFishAST[]): PaintItem[] {
       // Plain (non-component) nested layers are transparent for paint
       // ordering — their children are hoisted into this paint context.
       if (!child._isComponent && child.type === "layer") {
-        const cTx = accTx + (child.transform?.translate?.[0] ?? 0);
-        const cTy = accTy + (child.transform?.translate?.[1] ?? 0);
-        walk(child.children, cTx, cTy);
+        // Stage 3 (#39): read the LEDGER projection, not the raw
+        // `transform.translate` — a placed nested layer has its written translate
+        // cleared on solved axes, so `displayTranslate(child.transform)` would
+        // hoist its children at [0,0]. `projectedTranslate` derives the real
+        // offset (the same retirement bake.ts/`_ref` already use).
+        const childTx = child.projectedTranslate(0) ?? 0;
+        const childTy = child.projectedTranslate(1) ?? 0;
+        walk(child.children, accTx + childTx, accTy + childTy);
       } else {
         out.push({
           node: child,
@@ -766,6 +772,9 @@ export const layer = createNodeOperatorSequential(
               sf = sp.width !== 0 ? size[axis] / sp.width : 0;
             }
             if (sf !== undefined) childScaleFactors[axis] = sf;
+            // Solver shadow (#39): assert the frame equation content(σ)=allocated
+            // closes for this σ-scope. No-op unless GOFISH_SOLVER_CHECK is set.
+            shadowCheckScaleRoot(sp, size[axis], sf, axis);
           }
 
           // Per-child proposed size for distribute-covered children: each
@@ -1011,19 +1020,14 @@ export const layer = createNodeOperatorSequential(
             dims[1].min !== undefined ? dims[1].min - minY : undefined;
 
           return {
+            // Store only the local box `(min, size)`; the `dims` getter derives
+            // center/max from it via `localAnchorPoint` (`size = max − min ≥ 0`,
+            // both ends from the same child fold). Writing them here was dead —
+            // every consumer reads `.dims`, and layer's own render ignores
+            // `intrinsicDims` entirely (#39 stage 3).
             intrinsicDims: [
-              {
-                min: minX,
-                size: maxX - minX,
-                center: minX + (maxX - minX) / 2,
-                max: maxX,
-              },
-              {
-                min: minY,
-                size: maxY - minY,
-                center: minY + (maxY - minY) / 2,
-                max: maxY,
-              },
+              { min: minX, size: maxX - minX },
+              { min: minY, size: maxY - minY },
             ],
             transform: {
               translate: [
@@ -1037,9 +1041,8 @@ export const layer = createNodeOperatorSequential(
         render: ({ transform, coordinateTransform }, children, node) => {
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
-          const wrapTransform = `translate(${transform?.translate?.[0] ?? 0}, ${
-            transform?.translate?.[1] ?? 0
-          }) scale(${scaleX}, ${scaleY})`;
+          const [wrapTx, wrapTy] = displayTranslate(transform);
+          const wrapTransform = `translate(${wrapTx}, ${wrapTy}) scale(${scaleX}, ${scaleY})`;
 
           // Z-order resolution: when this layer carries any zAbove/zBelow
           // constraints, flatten the (non-component) subtree and emit in

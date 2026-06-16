@@ -12,7 +12,13 @@ import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 import { GoFishNode, Placeable } from "../_node";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
-import { FancyDims, Size, Direction, elaborateDims } from "../dims";
+import {
+  FancyDims,
+  Size,
+  Direction,
+  elaborateDims,
+  translateString,
+} from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import {
@@ -262,8 +268,8 @@ export const Treemap = createNodeOperator(
           if (childAsts.length === 0) {
             return {
               intrinsicDims: {
-                0: { min: 0, size: 0, center: 0, max: 0 },
-                1: { min: 0, size: 0, center: 0, max: 0 },
+                0: { min: 0, size: 0 },
+                1: { min: 0, size: 0 },
               },
               transform: { translate: { 0: undefined, 1: undefined } },
             };
@@ -310,14 +316,10 @@ export const Treemap = createNodeOperator(
               0: {
                 min: xMin,
                 size: xMax - xMin,
-                center: (xMin + xMax) / 2,
-                max: xMax,
               },
               1: {
                 min: yMin,
                 size: yMax - yMin,
-                center: (yMin + yMax) / 2,
-                max: yMax,
               },
             },
             transform: {
@@ -329,12 +331,8 @@ export const Treemap = createNodeOperator(
           };
         },
         render: ({ transform }, renderedChildren) => {
-          const translateX = transform?.translate?.[0] ?? 0;
-          const translateY = transform?.translate?.[1] ?? 0;
           return (
-            <g transform={`translate(${translateX}, ${translateY})`}>
-              {renderedChildren}
-            </g>
+            <g transform={translateString(transform)}>{renderedChildren}</g>
           );
         },
       },

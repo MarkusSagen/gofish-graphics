@@ -10,7 +10,13 @@ import {
   isValue,
   MaybeValue,
 } from "../data";
-import { Dimensions, elaborateDims, FancyDims, Transform } from "../dims";
+import {
+  Dimensions,
+  displayTranslate,
+  elaborateDims,
+  FancyDims,
+  Transform,
+} from "../dims";
 import {
   DIFFERENCE,
   ORDINAL,
@@ -277,15 +283,11 @@ export const Text = ({
             {
               min: minX,
               size: maxX - minX,
-              center: (minX + maxX) / 2,
-              max: maxX,
               embedded: dims[0].embedded,
             },
             {
               min: minY,
               size: maxY - minY,
-              center: (minY + maxY) / 2,
-              max: maxY,
               embedded: dims[1].embedded,
             },
           ],
@@ -312,8 +314,7 @@ export const Text = ({
           ? getValue(textContent)
           : textContent;
 
-        const anchorX = transform?.translate?.[0] ?? 0;
-        const anchorY = transform?.translate?.[1] ?? 0;
+        const [anchorX, anchorY] = displayTranslate(transform);
 
         const unit = node.getRenderSession().scaleContext?.unit;
         const unitColorScale = unit && "color" in unit ? unit.color : undefined;

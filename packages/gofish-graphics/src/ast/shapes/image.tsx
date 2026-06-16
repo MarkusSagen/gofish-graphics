@@ -9,7 +9,13 @@ import {
   isAesthetic,
   isValue,
 } from "../data";
-import { Dimensions, elaborateDims, FancyDims, Transform } from "../dims";
+import {
+  Dimensions,
+  displayTranslate,
+  elaborateDims,
+  FancyDims,
+  Transform,
+} from "../dims";
 import {
   DIFFERENCE,
   ORDINAL,
@@ -318,15 +324,11 @@ export const Image = ({
             {
               min: 0,
               size: resolvedDimensions.width,
-              center: resolvedDimensions.width / 2,
-              max: resolvedDimensions.width,
               embedded: dims[0].embedded,
             },
             {
               min: 0,
               size: resolvedDimensions.height,
-              center: resolvedDimensions.height / 2,
-              max: resolvedDimensions.height,
               embedded: dims[1].embedded,
             },
           ],
@@ -342,10 +344,9 @@ export const Image = ({
         intrinsicDims?: Dimensions;
         transform?: Transform;
       }) => {
-        const x =
-          (transform?.translate?.[0] ?? 0) + (intrinsicDims?.[0]?.min ?? 0);
-        const y =
-          (transform?.translate?.[1] ?? 0) + (intrinsicDims?.[1]?.min ?? 0);
+        const [tx, ty] = displayTranslate(transform);
+        const x = tx + (intrinsicDims?.[0]?.min ?? 0);
+        const y = ty + (intrinsicDims?.[1]?.min ?? 0);
         const width = intrinsicDims?.[0]?.size ?? 0;
         const height = intrinsicDims?.[1]?.size ?? 0;
 

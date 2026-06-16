@@ -2,6 +2,7 @@ import type { JSX } from "solid-js";
 import {
   Anchor,
   Dimensions,
+  Direction,
   elaborateDims,
   elaborateDirection,
   elaboratePosition,
@@ -12,6 +13,8 @@ import {
   FancyPosition,
   FancySize,
   FancyTransform,
+  combineDims,
+  localAnchorPoint,
   Position,
   Size,
   Transform,
@@ -275,14 +278,20 @@ export class GoFishRef {
     // Find the least common ancestor between this ref and the selected node
     const lca = findLeastCommonAncestor(this, this.selectedNode);
 
+    // Stage 3-C (#39): accumulate the LEDGER-DERIVED translate, so ref geometry
+    // survives retiring the direct translate writes. `projectedTranslate` is
+    // polymorphic across the union — a node returns its ledger projection (==
+    // written field where solved, else the fallback); a ref has no ledger so it
+    // returns its computed transform directly.
+    const translateOf = (n: GoFishAST, dir: Direction): number =>
+      n.projectedTranslate(dir) ?? 0;
+
     // Compute transform from selected node up to LCA
     const upwardTranslate: [number, number] = [0, 0];
     let current: GoFishAST | undefined = this.selectedNode;
     while (current && current !== lca) {
-      if (current.transform) {
-        upwardTranslate[0] += current.transform.translate?.[0] ?? 0;
-        upwardTranslate[1] += current.transform.translate?.[1] ?? 0;
-      }
+      upwardTranslate[0] += translateOf(current, 0);
+      upwardTranslate[1] += translateOf(current, 1);
       current = current.parent;
     }
 
@@ -290,10 +299,8 @@ export class GoFishRef {
     const downwardTranslate: [number, number] = [0, 0];
     current = this;
     while (current && current !== lca) {
-      if (current.transform) {
-        downwardTranslate[0] += current.transform.translate?.[0] ?? 0;
-        downwardTranslate[1] += current.transform.translate?.[1] ?? 0;
-      }
+      downwardTranslate[0] += translateOf(current, 0);
+      downwardTranslate[1] += translateOf(current, 1);
       current = current.parent;
     }
 
@@ -311,31 +318,19 @@ export class GoFishRef {
   }
 
   public get dims(): Dimensions {
-    // Combine intrinsicDims and transform. Return undefined for min/center/max/size
-    // when either the intrinsic dim or translation for that dimension is undefined,
-    // so callers can distinguish "not yet placed" from "at 0".
-    const dim = (i: 0 | 1) => {
-      const intrinsic = this.intrinsicDims?.[i];
-      const translate = this.transform?.translate?.[i];
-      const hasTranslate = translate !== undefined;
-      return {
-        min:
-          hasTranslate && intrinsic?.min !== undefined
-            ? (intrinsic!.min ?? 0) + translate!
-            : undefined,
-        center:
-          hasTranslate && intrinsic?.center !== undefined
-            ? (intrinsic!.center ?? 0) + translate!
-            : undefined,
-        max:
-          hasTranslate && intrinsic?.max !== undefined
-            ? (intrinsic!.max ?? 0) + translate!
-            : undefined,
-        size: intrinsic?.size,
-        embedded: intrinsic?.embedded,
-      };
-    };
-    return [dim(0), dim(1)];
+    // Shared with GoFishNode.dims (see {@link combineDims}): combine the local
+    // box (`intrinsicDims`) with its placement (`translate`), deriving center/max
+    // from the placed (min, size).
+    return combineDims(this.intrinsicDims, this.transform);
+  }
+
+  /** The ref's origin as a `Placeable.projectedTranslate` (#39). A ref has no
+   *  ledger, so the projection IS its computed `transform.translate` — exposing
+   *  it lets every translate reader (the coord bake, `_ref` accumulation,
+   *  baseline align) call `projectedTranslate` polymorphically across the
+   *  `GoFishNode | GoFishRef` union instead of branching on `instanceof`. */
+  public projectedTranslate(dir: Direction): number | undefined {
+    return this.transform?.translate?.[dir];
   }
 
   public place(
@@ -345,34 +340,23 @@ export class GoFishRef {
   ): void {
     const dir = elaborateDirection(axis);
     const intrinsic = this.intrinsicDims?.[dir];
+    const localMin = intrinsic?.min;
+    const size = intrinsic?.size;
 
-    const anchorToDim = {
-      min: intrinsic?.min,
-      max: intrinsic?.max,
-      center: intrinsic?.center,
-      // TODO: revisit baseline case
-      baseline: intrinsic?.min,
-    };
-
-    if (anchorToDim[anchor] === undefined) {
-      // Interval has min/max/center/size but not "baseline" — baseline is a
-      // synthetic anchor aliased to min above (see TODO). When the anchor is
-      // already undefined and we're being asked to set it, "baseline" can't
-      // be written back: just no-op so the translate path below is skipped.
-      if (anchor !== "baseline") {
-        this.intrinsicDims![dir][anchor] = value;
-      }
+    // center/max are DERIVED from (min, size) (mirrors GoFishNode.place): they're
+    // determined only when both are; min/baseline need only min. When not
+    // determined, only the local min is recordable (center/max aren't stored).
+    const determined =
+      anchor === "center" || anchor === "max"
+        ? localMin !== undefined && size !== undefined
+        : localMin !== undefined;
+    if (!determined) {
+      if (anchor === "min") this.intrinsicDims![dir].min = value;
       return;
     }
 
-    const anchorToPoint = {
-      min: intrinsic!.min ?? 0,
-      max: intrinsic!.max ?? 0,
-      center: intrinsic!.center ?? 0,
-      baseline: 0,
-    };
-
-    this.transform!.translate![dir] = value - anchorToPoint[anchor];
+    this.transform!.translate![dir] =
+      value - localAnchorPoint(anchor, localMin ?? 0, size ?? 0);
   }
 
   public INTERNAL_render(): JSX.Element {

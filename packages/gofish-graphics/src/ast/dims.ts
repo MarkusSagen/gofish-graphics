@@ -95,6 +95,38 @@ export type FancyDirection = "x" | "y" | Direction;
 
 export type Anchor = "min" | "max" | "center" | "baseline";
 
+/**
+ * The single derivation of an anchor's coordinate on a box anchored at `start`
+ * with signed extent `size`: `min → start`, `center → start + |size|/2`,
+ * `max → start + |size|`, `baseline → 0` (the origin). center/max are DERIVED
+ * here, never read from a separately-stored facet — so every site that needs them
+ * agrees: the two placement paths (`place()` / `setExtent`'s rank-1 pin), the
+ * `dims` getters (GoFishNode + GoFishRef), and `displayDims`. That removed the
+ * asymmetric-box divergence that reverted the earlier `place()→setExtent` reroute
+ * (#39 stage 2).
+ *
+ * Pure arithmetic on `(start, size)` — works in any frame. `|size|` is the
+ * MAGNITUDE: a negative bar stores a signed size with `start` (its `min`) carrying
+ * the direction, so its box is `[start, start + |size|]`.
+ */
+export const localAnchorPoint = (
+  anchor: Anchor,
+  start: number,
+  size: number
+): number => {
+  const extent = Math.abs(size);
+  switch (anchor) {
+    case "min":
+      return start;
+    case "center":
+      return start + extent / 2;
+    case "max":
+      return start + extent;
+    case "baseline":
+      return 0;
+  }
+};
+
 export const elaborateDirection = (direction: FancyDirection): Direction => {
   switch (direction) {
     case "x":
@@ -148,6 +180,94 @@ export const elaborateSize = <T>(size: FancySize<T>): Size<T> => {
 
 export type Transform = { translate: Position; scale?: Size };
 export type FancyTransform = { translate?: FancyPosition; scale?: FancySize };
+
+/**
+ * Combine a node's local box (`intrinsicDims`) with its `transform.translate`
+ * into absolute per-axis display dims, DERIVING center/max from `(min, size)`
+ * (the same relation as {@link localAnchorPoint} / the `dims` getter). Mirrors
+ * the getter but with `?? 0` fallbacks — an unplaced/unsized facet reads 0,
+ * which is what a shape `_render` wants for drawing. Shapes share this instead
+ * of each re-deriving center/max from a separately-stored facet.
+ */
+export const displayDims = (
+  intrinsicDims: Dimensions | undefined,
+  transform: { translate?: (number | undefined)[] } | undefined
+): { min: number; size: number; center: number; max: number }[] =>
+  ([0, 1] as const).map((i) => {
+    const min =
+      (transform?.translate?.[i] ?? 0) + (intrinsicDims?.[i]?.min ?? 0);
+    const size = intrinsicDims?.[i]?.size ?? 0;
+    return {
+      min,
+      size, // raw (signed) — callers read it directly for width/height
+      center: localAnchorPoint("center", min, size),
+      max: localAnchorPoint("max", min, size),
+    };
+  });
+
+/**
+ * A node's render-side translate offset as a concrete `[tx, ty]` tuple, with the
+ * `?? 0` fallback every shape/operator `_render` wants for drawing (an unplaced
+ * axis draws at the origin). This is the single chokepoint for render's
+ * `transform.translate` reads: making the move to baked absolute coordinates
+ * (#39 stage 3-D) a one-function change rather than a ~15-site sweep. Scale is
+ * left to the callers that compose it.
+ */
+export const displayTranslate = (transform?: {
+  translate?: (number | undefined)[];
+}): [number, number] => [
+  transform?.translate?.[0] ?? 0,
+  transform?.translate?.[1] ?? 0,
+];
+
+/**
+ * The SVG `translate(tx, ty)` attribute string for a node's transform — the
+ * render-wrapper form of {@link displayTranslate}, shared by every container/mark
+ * that emits a `<g transform="translate(...)">`. These wrappers are exactly the
+ * ones #39 stage 3-D collapses once render consumes baked absolute coordinates.
+ */
+export const translateString = (transform?: {
+  translate?: (number | undefined)[];
+}): string => {
+  const [tx, ty] = displayTranslate(transform);
+  return `translate(${tx}, ${ty})`;
+};
+
+/**
+ * The `dims` getter body shared by {@link GoFishNode} and {@link GoFishRef}:
+ * combine a node's local box (`intrinsicDims`) with its `transform.translate`
+ * into absolute per-axis dims, returning `undefined` facets for "not yet placed
+ * / not yet sized" so callers can distinguish that from "at 0". center/max are
+ * DERIVED from the placed `(min, size)` via {@link localAnchorPoint} — never read
+ * from a separately-stored facet, and only once the box is both placed AND sized.
+ *
+ * This is the `undefined`-preserving sibling of {@link displayDims}: same
+ * derivation, but `displayDims` substitutes `?? 0` because a shape `_render`
+ * wants a concrete number to draw with.
+ */
+export const combineDims = (
+  intrinsicDims: Dimensions | undefined,
+  transform: { translate?: (number | undefined)[] } | undefined
+): Dimensions =>
+  ([0, 1] as const).map((i) => {
+    const intrinsic = intrinsicDims?.[i];
+    const translate = transform?.translate?.[i];
+    const size = intrinsic?.size;
+    const min =
+      translate !== undefined && intrinsic?.min !== undefined
+        ? intrinsic.min + translate
+        : undefined;
+    const placedAndSized = min !== undefined && size !== undefined;
+    return {
+      min,
+      center: placedAndSized
+        ? localAnchorPoint("center", min!, size!)
+        : undefined,
+      max: placedAndSized ? localAnchorPoint("max", min!, size!) : undefined,
+      size,
+      embedded: intrinsic?.embedded,
+    };
+  });
 
 export const elaborateTransform = (transform: FancyTransform): Transform => {
   return {

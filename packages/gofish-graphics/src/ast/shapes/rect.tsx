@@ -20,6 +20,7 @@ import {
 } from "../data";
 import {
   Dimensions,
+  displayDims as displayDimsOf,
   elaborateDims,
   FancyDims,
   FancySize,
@@ -258,17 +259,18 @@ export const Rect = ({
           intrinsicDims: {
             dims: [
               {
-                min: w >= 0 ? 0 : w,
-                size: w,
-                center: w / 2,
-                max: w >= 0 ? w : 0,
+                // Store the box canonically: true min + unsigned extent. A
+                // negative bar grows downward, so its min is the negative
+                // endpoint and its size is the magnitude. Every derivation site
+                // (`localAnchorPoint`, `displayDims`, the `dims` getters) then
+                // reads a non-negative `size` and never needs `Math.abs`.
+                min: Math.min(0, w),
+                size: Math.abs(w),
                 embedded: dims[0].embedded,
               },
               {
-                min: h >= 0 ? 0 : h,
-                size: h,
-                center: h / 2,
-                max: h >= 0 ? h : 0,
+                min: Math.min(0, h),
+                size: Math.abs(h),
                 embedded: dims[1].embedded,
               },
             ],
@@ -298,29 +300,8 @@ export const Rect = ({
         const isXEmbedded = intrinsicDims![0].embedded;
         const isYEmbedded = intrinsicDims![1].embedded;
 
-        // combine intrinsicDims with transform
-        const displayDims = [
-          {
-            min:
-              (transform?.translate?.[0] ?? 0) + (intrinsicDims?.[0]?.min ?? 0),
-            size: intrinsicDims?.[0]?.size ?? 0,
-            center:
-              (transform?.translate?.[0] ?? 0) +
-              (intrinsicDims?.[0]?.center ?? 0),
-            max:
-              (transform?.translate?.[0] ?? 0) + (intrinsicDims?.[0]?.max ?? 0),
-          },
-          {
-            min:
-              (transform?.translate?.[1] ?? 0) + (intrinsicDims?.[1]?.min ?? 0),
-            size: intrinsicDims?.[1]?.size ?? 0,
-            center:
-              (transform?.translate?.[1] ?? 0) +
-              (intrinsicDims?.[1]?.center ?? 0),
-            max:
-              (transform?.translate?.[1] ?? 0) + (intrinsicDims?.[1]?.max ?? 0),
-          },
-        ];
+        // combine intrinsicDims with transform (center/max derived from min+size)
+        const displayDims = displayDimsOf(intrinsicDims, transform);
 
         const scaleContext = node.getRenderSession().scaleContext;
         const unit = scaleContext?.unit;
@@ -350,8 +331,8 @@ export const Rect = ({
         // Both dimensions are aesthetic - render as transformed point
         if (!isXEmbedded && !isYEmbedded) {
           const center: [number, number] = [
-            (displayDims[0].min ?? 0) + (displayDims[0].size ?? 0) / 2,
-            (displayDims[1].min ?? 0) + (displayDims[1].size ?? 0) / 2,
+            displayDims[0].center ?? 0,
+            displayDims[1].center ?? 0,
           ];
           const [transformedX, transformedY] = space.transform(center);
           const width = displayDims[0].size ?? 0;
@@ -397,30 +378,24 @@ export const Rect = ({
           const thickness = displayDims[aestheticAxis].size ?? 0;
 
           // Calculate midpoint of aesthetic axis
-          const aestheticMid =
-            (displayDims[aestheticAxis].min ?? 0) +
-            (displayDims[aestheticAxis].size ?? 0) / 2;
+          const aestheticMid = displayDims[aestheticAxis].center ?? 0;
 
           // For linear spaces, we can render a simple line
           if (space.type === "linear") {
-            const baseX = isXEmbedded
+            // `max - min` is the unsigned extent (size), so width/height are
+            // already non-negative and x/y are the box's true min corner.
+            const x = isXEmbedded
               ? (displayDims[0].min ?? 0)
               : aestheticMid - thickness / 2;
-            const baseY = isXEmbedded
+            const y = isXEmbedded
               ? aestheticMid - thickness / 2
               : (displayDims[1].min ?? 0);
-            const rawWidth = isXEmbedded
+            const width = isXEmbedded
               ? (displayDims[0].max ?? 0) - (displayDims[0].min ?? 0)
               : thickness;
-            const rawHeight = isXEmbedded
+            const height = isXEmbedded
               ? thickness
               : (displayDims[1].max ?? 0) - (displayDims[1].min ?? 0);
-
-            // Handle negative dimensions by using absolute values and adjusting positions
-            const width = Math.abs(rawWidth);
-            const height = Math.abs(rawHeight);
-            const x = rawWidth < 0 ? baseX + rawWidth : baseX;
-            const y = rawHeight < 0 ? baseY + rawHeight : baseY;
 
             const center: [number, number] = [x + width / 2, y + height / 2];
             const [transformedX, transformedY] = space.transform(center);
@@ -495,16 +470,12 @@ export const Rect = ({
 
         // If we're in a linear space, render as a rect element
         if (space.type === "linear") {
-          const baseX = displayDims[0].min ?? 0;
-          const baseY = displayDims[1].min ?? 0;
-          const rawWidth = (displayDims[0].max ?? 0) - baseX;
-          const rawHeight = (displayDims[1].max ?? 0) - baseY;
-
-          // Handle negative dimensions by using absolute values and adjusting positions
-          const width = Math.abs(rawWidth);
-          const height = Math.abs(rawHeight);
-          const x = rawWidth < 0 ? baseX + rawWidth : baseX;
-          const y = rawHeight < 0 ? baseY + rawHeight : baseY;
+          // `max - min` is the unsigned extent, so the min corner and size are
+          // already correct without sign adjustment.
+          const x = displayDims[0].min ?? 0;
+          const y = displayDims[1].min ?? 0;
+          const width = (displayDims[0].max ?? 0) - x;
+          const height = (displayDims[1].max ?? 0) - y;
 
           const center: [number, number] = [x + width / 2, y + height / 2];
           const [transformedX, transformedY] = space.transform(center);

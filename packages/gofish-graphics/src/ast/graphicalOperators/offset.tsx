@@ -1,5 +1,6 @@
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
+import { displayTranslate } from "../dims";
 import { createNodeOperator } from "../withGoFish";
 
 /**
@@ -44,22 +45,19 @@ export const offset = createNodeOperator<{ x?: number; y?: number }, GoFishAST>(
               {
                 min: child.dims[0].min ?? 0,
                 size: child.dims[0].size ?? 0,
-                center: child.dims[0].center ?? 0,
-                max: child.dims[0].max ?? 0,
               },
               {
                 min: child.dims[1].min ?? 0,
                 size: child.dims[1].size ?? 0,
-                center: child.dims[1].center ?? 0,
-                max: child.dims[1].max ?? 0,
               },
             ],
             transform: { translate: [undefined, undefined] },
           };
         },
         render: ({ transform }, renderedChildren) => {
-          const tx = (transform?.translate?.[0] ?? 0) + dx;
-          const ty = (transform?.translate?.[1] ?? 0) + dy;
+          const [ownTx, ownTy] = displayTranslate(transform);
+          const tx = ownTx + dx;
+          const ty = ownTy + dy;
           return (
             <g transform={`translate(${tx}, ${ty})`}>{renderedChildren[0]}</g>
           );

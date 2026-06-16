@@ -3,7 +3,13 @@ import { Path, PathSegment, pathToSVGPath, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import { isCategoricalScale } from "../gofish";
-import { Dimensions, elaborateDirection, FancyDirection, Size } from "../dims";
+import {
+  Dimensions,
+  elaborateDirection,
+  FancyDirection,
+  Size,
+  translateString,
+} from "../dims";
 import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
 import { getValue, isValue, MaybeValue } from "../data";
@@ -183,14 +189,10 @@ export const connect = createNodeOperator(
                 {
                   min: hasPaths ? aMinX : 0,
                   size: w,
-                  center: hasPaths ? aMinX + w / 2 : 0,
-                  max: hasPaths ? aMaxX : 0,
                 },
                 {
                   min: hasPaths ? aMinY : 0,
                   size: h,
-                  center: hasPaths ? aMinY + h / 2 : 0,
-                  max: hasPaths ? aMaxY : 0,
                 },
               ],
               transform: { translate: [0, 0] },
@@ -486,14 +488,10 @@ export const connect = createNodeOperator(
               {
                 min: bboxPairs.length > 0 ? bboxMinX : 0,
                 size: bboxW,
-                center: bboxPairs.length > 0 ? bboxMinX + bboxW / 2 : 0,
-                max: bboxPairs.length > 0 ? bboxMaxX : 0,
               },
               {
                 min: bboxPairs.length > 0 ? bboxMinY : 0,
                 size: bboxH,
-                center: bboxPairs.length > 0 ? bboxMinY + bboxH / 2 : 0,
-                max: bboxPairs.length > 0 ? bboxMaxY : 0,
               },
             ],
             transform: { translate: [0, 0] },
@@ -516,9 +514,7 @@ export const connect = createNodeOperator(
             : (rawFill as string | undefined);
 
           return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${transform?.translate?.[1]! ?? 0})`}
-            >
+            <g transform={translateString(transform)}>
               <For each={renderData.paths}>
                 {(path) => {
                   const transformedPath = coordinateTransform

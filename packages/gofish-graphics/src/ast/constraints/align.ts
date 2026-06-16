@@ -92,8 +92,11 @@ const anchorValue = (target: Placeable, idx: 0 | 1, a: AlignAnchor): number =>
     : a === "middle"
       ? target.dims[idx].center!
       : a === "baseline"
-        ? // The target's origin: its placed translate (0 if intrinsic-only).
-          (target.transform?.translate?.[idx] ?? 0)
+        ? // The target's origin: the ledger-projected translate (#39 stage 3 —
+          // survives retiring the written translate). Polymorphic across the
+          // union (a ref's projection is its computed transform), so no
+          // `instanceof`/raw-field fallback; 0 for an unplaced intrinsic-only box.
+          (target.projectedTranslate?.(idx) ?? 0)
         : target.dims[idx].max!;
 
 /** Place `target` on `axis` so its anchor `a` lands at `value`. */
@@ -145,22 +148,29 @@ export const alignFallbackBaseline = (
   return 0; // start | baseline → layer origin
 };
 
+/** One emitted alignment equation: the target's `anchor` lands at `value` (the
+ *  shared baseline). */
+export interface AlignPlacement {
+  target: Placeable;
+  anchor: AlignAnchor;
+  value: number;
+}
+
 /**
- * Place `targets` on one axis so each lands at a single shared baseline,
- * read at its own anchor. The baseline is taken from the first already-placed
- * target (via `policy.readPlaced`), or from the shared space-kind-dispatched
- * `alignFallbackBaseline` when none is placed; already-placed targets are left
- * untouched. This is the single placement walk shared by the `align` constraint
- * and spread's cross-axis alignment — only the `readPlaced` reader differs (see
- * `AlignBaselinePolicy`).
+ * EMIT the alignment as facet-placement equations (#39 facet-equation-emitter
+ * form) WITHOUT applying them: every not-already-placed target gets its `anchor`
+ * pinned to one shared baseline, read at its own anchor. The baseline is the
+ * first already-placed target's anchor (via `policy.readPlaced`), else the shared
+ * space-kind-dispatched `alignFallbackBaseline`; already-placed targets are left
+ * untouched. Pure (reads only pre-existing geometry).
  */
-export function alignTargets(
+export function emitAlignTargets(
   targets: Placeable[],
   axis: Axis,
   anchors: AlignAnchor[],
   policy: AlignBaselinePolicy,
   env: AlignAxisEnv
-): void {
+): AlignPlacement[] {
   const idx = axisIndex(axis);
 
   let baseline: number | undefined;
@@ -175,10 +185,30 @@ export function alignTargets(
   if (baseline === undefined)
     baseline = alignFallbackBaseline(anchors[0], env.size, env.posScale);
 
+  const out: AlignPlacement[] = [];
   for (let i = 0; i < targets.length; i++) {
     if (isPlacedOn(targets[i], idx)) continue;
-    placeAtAnchor(targets[i], axis, baseline, anchors[i]);
+    out.push({ target: targets[i], anchor: anchors[i], value: baseline });
   }
+  return out;
+}
+
+/**
+ * Commit the emitted alignment equations: pin each target's anchor at the shared
+ * baseline. The single placement walk shared by the `align` constraint and
+ * spread's cross-axis alignment — only the `readPlaced` reader differs (see
+ * `AlignBaselinePolicy`). The emit/commit seam is where a per-scope solver slots
+ * in (consume {@link emitAlignTargets} instead of pinning here).
+ */
+export function alignTargets(
+  targets: Placeable[],
+  axis: Axis,
+  anchors: AlignAnchor[],
+  policy: AlignBaselinePolicy,
+  env: AlignAxisEnv
+): void {
+  for (const p of emitAlignTargets(targets, axis, anchors, policy, env))
+    placeAtAnchor(p.target, axis, p.value, p.anchor);
 }
 
 function applyAlignAxis(

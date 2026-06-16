@@ -1,6 +1,6 @@
 import { computeAesthetic } from "../../util";
 import { GoFishNode } from "../_node";
-import { Size, elaborateDims, FancyDims } from "../dims";
+import { Size, elaborateDims, FancyDims, translateString } from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import { POSITION, UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { interval } from "../../util/interval";
@@ -72,20 +72,15 @@ export const position = createNodeOperator(
           childPlaceable.place("x", offsetX);
           childPlaceable.place("y", offsetY);
 
+          // Store only the local box (min, size); center/max are derived from
+          // them by the `dims` getter. Previously this stored `center: xPos`,
+          // which diverged from `min + size/2` when the child had a nonzero local
+          // min — the asymmetric box that complicated the placement ledger (#39
+          // stage 2). The geometric center (`min + size/2`) is the placed center.
           return {
             intrinsicDims: [
-              {
-                min: childPlaceable.dims[0].min! + offsetX,
-                size: childWidth,
-                center: xPos,
-                max: childPlaceable.dims[0].max! + offsetX,
-              },
-              {
-                min: childPlaceable.dims[1].min! + offsetY,
-                size: childHeight,
-                center: yPos,
-                max: childPlaceable.dims[1].max! + offsetY,
-              },
+              { min: childPlaceable.dims[0].min! + offsetX, size: childWidth },
+              { min: childPlaceable.dims[1].min! + offsetY, size: childHeight },
             ],
             transform: {
               translate: [offsetX, offsetY],
@@ -93,15 +88,7 @@ export const position = createNodeOperator(
           };
         },
         render: ({ intrinsicDims, transform }, children) => {
-          return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${
-                transform?.translate?.[1] ?? 0
-              })`}
-            >
-              {children}
-            </g>
-          );
+          return <g transform={translateString(transform)}>{children}</g>;
         },
       },
       children

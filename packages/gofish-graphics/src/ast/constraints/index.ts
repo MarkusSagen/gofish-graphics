@@ -6,6 +6,7 @@ import { mergeMeasures } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { applyAlign, createAlignConstraint } from "./align";
 import { applyDistribute, createDistributeConstraint } from "./distribute";
+import { shadowCheckConstraint, solverCheckEnabled } from "../solver/shadow";
 import { applyPosition, createPositionConstraint } from "./position";
 import {
   createZAboveConstraint,
@@ -27,7 +28,11 @@ import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint, GridOptions } from "./grid";
 import type { SpanConstraint, SpanOptions } from "./span";
-import { type ConstraintPosScales, type ConstraintRef } from "./shared";
+import {
+  isPlacedOn,
+  type ConstraintPosScales,
+  type ConstraintRef,
+} from "./shared";
 
 export type {
   Axis,
@@ -283,6 +288,15 @@ export function applyConstraints(
 
     if (targets.length === 0) continue;
 
+    // Solver shadow (#39, disposable observe→assert): snapshot each target's
+    // per-axis placement BEFORE the constraint runs — only when the check is on,
+    // so production pays nothing. The single hook below dispatches/no-ops.
+    const prePlaced = solverCheckEnabled()
+      ? targets.map(
+          (t) => [isPlacedOn(t, 0), isPlacedOn(t, 1)] as [boolean, boolean]
+        )
+      : undefined;
+
     if (constraint.type === "align") {
       applyAlign(constraint, targets, sizes, posScales);
     } else if (constraint.type === "position") {
@@ -292,5 +306,6 @@ export function applyConstraints(
     } else {
       applyDistribute(constraint, targets);
     }
+    shadowCheckConstraint(constraint, targets, posScales, prePlaced);
   }
 }
