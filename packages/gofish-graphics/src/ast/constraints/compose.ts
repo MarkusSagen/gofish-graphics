@@ -49,6 +49,7 @@ import { unionChildSpaces } from "../graphicalOperators/alignment";
 import { type ConstraintSpec } from ".";
 import { distributeSpaceFold, type DistributeConstraint } from "./distribute";
 import { alignSpaceFold, type AlignConstraint } from "./align";
+import type { SpanConstraint } from "./span";
 import { axisIndex, buildNameIndex, type AlignAnchor } from "./shared";
 
 /** One distribute's slice of the layout budget: equal shares of the axis size
@@ -97,18 +98,28 @@ export function composeConstraintSpaces(
   const aligns = constraints.filter(
     (c): c is AlignConstraint => c.type === "align"
   );
-  // Compose only layers that are PURELY distributes + aligns. A `position` pin
-  // (or z-order) puts the layer in a different regime — the distribute-relative-
-  // to-a-pin solve is deferred (layout-synthesis.md) — so leave it to the
-  // layer's default union, which already merges position data domains.
-  if (distributes.length + aligns.length !== constraints.length)
+  // `span` (the size-setting interval constraint, #39/#546) establishes its
+  // axis's extent like a distribute does — its datum range already feeds the
+  // layer's POSITION domain via `collectPositionDomains`, so it needs no fold
+  // here, but its PRESENCE means this is NOT a pure overlay: the cross-axis
+  // align fold (SIZE→POSITION) must still run (e.g. a histogram = span on x,
+  // align on y; the align fold is what makes the count axis).
+  const spans = constraints.filter(
+    (c): c is SpanConstraint => c.type === "span"
+  );
+  // Compose only layers that are PURELY distributes + aligns + spans. A
+  // `position` pin (or z-order) puts the layer in a different regime — the
+  // distribute-relative-to-a-pin solve is deferred (layout-synthesis.md) — so
+  // leave it to the layer's default union, which already merges position
+  // data domains.
+  if (distributes.length + aligns.length + spans.length !== constraints.length)
     return undefined;
-  // No series → a pure overlay. Align-only composition WOULD fold (alignSpaceFold
-  // converts SIZE→POSITION), but for a pure overlay that conversion only changes
-  // the layer's reported space (e.g. a legend's), so defer it: fall to the
-  // default union. (The per-axis loop already handles align-only axes when a
-  // distribute exists on the other axis.)
-  if (distributes.length === 0) return undefined;
+  // No series and no span → a pure overlay. Align-only composition WOULD fold
+  // (alignSpaceFold converts SIZE→POSITION), but for a pure overlay that
+  // conversion only changes the layer's reported space (e.g. a legend's), so
+  // defer it: fall to the default union. (A span on the other axis makes it not
+  // an overlay, so the align fold runs.)
+  if (distributes.length === 0 && spans.length === 0) return undefined;
 
   const indexByName = buildNameIndex(childNodes);
   const keyOf = (i: number): string | undefined =>
@@ -158,6 +169,20 @@ export function composeConstraintSpaces(
     }
   }
 
+  // A span COVERS its children on the axis it sizes (it sets their extent
+  // directly via `applySpan`, and their datum range already feeds the POSITION
+  // domain through `collectPositionDomains`). It contributes no fold here, but
+  // its children must be marked covered so the per-axis loop below does not also
+  // fold their raw extent in as an overlay sibling (double-counting) when a
+  // distribute/align shares the same axis.
+  const spanCover: [Set<number>, Set<number>] = [new Set(), new Set()];
+  for (const s of spans) {
+    const idx = idxOf(s.children);
+    if (idx === undefined) continue;
+    if (s.x !== undefined) idx.forEach((i) => spanCover[0].add(i));
+    if (s.y !== undefined) idx.forEach((i) => spanCover[1].add(i));
+  }
+
   const spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined] = [
     undefined,
     undefined,
@@ -173,7 +198,7 @@ export function composeConstraintSpaces(
     if (dists.length === 0 && als.length === 0) continue; // keep default union
 
     const fragments: Size<UnderlyingSpace>[] = [];
-    const covered = new Set<number>();
+    const covered = new Set<number>(spanCover[axis]);
     for (const s of dists) {
       s.idx.forEach((i) => covered.add(i));
       const fold = distributeSpaceFold(

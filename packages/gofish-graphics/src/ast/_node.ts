@@ -42,6 +42,7 @@ import type { TokenContext } from "./tokenContext";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import { collectConstraintRefs } from "./constraints";
+import { BBox, type BBoxFacet } from "./constraints/bbox";
 import {
   assignPaletteColor,
   assignGradientColor,
@@ -80,6 +81,15 @@ export type Placeable = {
    *  me". Exposed so the `baseline` align anchor can read a target's origin. */
   transform?: Transform;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
+  /** Write an axis extent from owned bbox facets (the size-setting primitive
+   *  #39 — `span` and an authoritative `position` pin go through it). Optional
+   *  because not every placeable shape implements it (a `ref` stand-in doesn't);
+   *  it is only ever invoked on real `GoFishNode` constraint targets. */
+  setExtent?: (
+    axis: FancyDirection,
+    owned: Partial<Record<BBoxFacet, number>>,
+    owner?: string
+  ) => void;
 };
 
 // `scaleFactors` is the σ (pixels-per-data-unit) handed down per axis. A node
@@ -566,10 +576,85 @@ export class GoFishNode {
       baseline: 0,
     };
 
-    if (!this.transform!.translate) {
-      this.transform!.translate = [undefined, undefined];
+    this.ensureTranslate()[dir] = value - anchorToPoint[anchor];
+  }
+
+  /**
+   * Write a node's per-axis extent from OWNED bbox facets (min/max/center/size)
+   * — the bbox-backed primitive that `span` and an authoritative `position` pin
+   * share (#39). Two or more owned facets DETERMINE the box (size included — the
+   * size-setting case, e.g. span's two edges), so the local box is reset to
+   * `[0, size]` and the translate to the absolute min. A single owned facet is a
+   * position pin: the size comes from the node's own layout (the second
+   * equation), the local box is left intact, and only the translate moves — so
+   * the pin OVERRIDES a self-placed translate, which the write-once `place()`
+   * cannot. Anchor facets map start→min, end→max, middle→center; `baseline`
+   * (the origin) is not a bbox facet, so a baseline pin still uses `place()`.
+   *
+   * NOTE (interim): each call builds a FRESH bbox, so over-determination is
+   * detected only WITHIN one call (e.g. span's two edges), not across separate
+   * constraints pinning the same target — the cross-constraint ledger is the
+   * remaining #39 step (accumulate facets per target, then solve once).
+   */
+  public setExtent(
+    axis: FancyDirection,
+    owned: Partial<Record<BBoxFacet, number>>,
+    owner?: string
+  ): void {
+    const dir = elaborateDirection(axis);
+    const facets = (
+      Object.entries(owned) as [BBoxFacet, number | undefined][]
+    ).filter((e): e is [BBoxFacet, number] => e[1] !== undefined);
+    if (facets.length === 0) return;
+
+    const intrinsic = this.intrinsicDims?.[dir];
+    const localMin = intrinsic?.min ?? 0;
+    const localSize = intrinsic?.size;
+    const sizeOwned = facets.length >= 2;
+
+    const bbox = new BBox();
+    for (const [facet, value] of facets) bbox.add(facet, value, owner);
+    if (!sizeOwned) {
+      // Rank-1 position pin: the second equation (the size) comes from the
+      // node's own layout — `0` for a point-like / unsized mark, matching the
+      // old `placePinned`'s `size ?? 0`, so the pin still rewrites the translate
+      // rather than silently dropping.
+      const [facet] = facets[0];
+      if (facet === "size") return; // a lone size can't determine a position
+      bbox.add("size", localSize ?? 0, "layout");
     }
-    this.transform!.translate![dir] = value - anchorToPoint[anchor];
+
+    const absMin = bbox.read("min");
+    const size = bbox.read("size");
+    if (absMin === undefined || size === undefined) return; // under-determined
+
+    const translate = this.ensureTranslate();
+    if (sizeOwned) {
+      // The box is (re)sized: its local frame becomes [0, size], placed at absMin.
+      if (!this.intrinsicDims) this.intrinsicDims = [];
+      this.intrinsicDims[dir] = {
+        ...(this.intrinsicDims[dir] ?? {}),
+        min: 0,
+        size,
+        center: size / 2,
+        max: size,
+      };
+      translate[dir] = absMin;
+    } else {
+      // Position pin: keep the local box, move the origin so the box's absolute
+      // min lands at absMin.
+      translate[dir] = absMin - localMin;
+    }
+  }
+
+  /** Lazily ensure `transform.translate` exists (preserving any `scale`) and
+   *  return it. Shared by `place()` and `setExtent` — the one place the
+   *  `[undefined, undefined]` "unplaced on both axes" seed is written. */
+  private ensureTranslate(): (number | undefined)[] {
+    if (!this.transform) this.transform = { translate: [undefined, undefined] };
+    if (!this.transform.translate)
+      this.transform.translate = [undefined, undefined];
+    return this.transform.translate;
   }
 
   public embed(direction: FancyDirection): void {

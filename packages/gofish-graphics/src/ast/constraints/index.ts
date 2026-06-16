@@ -1,7 +1,8 @@
 import type { GoFishAST } from "../_ast";
 import { GoFishNode, type Placeable } from "../_node";
 import { isToken, type Token } from "../createName";
-import { getValue, isValue } from "../data";
+import { getMeasure, getValue, isValue, type Measure } from "../data";
+import { mergeMeasures } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { applyAlign, createAlignConstraint } from "./align";
 import { applyDistribute, createDistributeConstraint } from "./distribute";
@@ -13,12 +14,19 @@ import {
 } from "./zorder";
 import { applyNest, createNestConstraint, isNestConstraint } from "./nest";
 import { applyGrid, createGridConstraint, isGridConstraint } from "./grid";
+import {
+  applySpan,
+  createSpanConstraint,
+  isSpanConstraint,
+  spanDatumInterval,
+} from "./span";
 import type { AlignConstraint, AlignOptions } from "./align";
 import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint, GridOptions } from "./grid";
+import type { SpanConstraint, SpanOptions } from "./span";
 import { type ConstraintPosScales, type ConstraintRef } from "./shared";
 
 export type {
@@ -37,9 +45,12 @@ export type {
 } from "./zorder";
 export type { NestConstraint, NestOptions } from "./nest";
 export type { GridConstraint, GridOptions } from "./grid";
+export type { SpanConstraint, SpanOptions } from "./span";
 export { isZOrderConstraint } from "./zorder";
 export { isNestConstraint, nestedSpace } from "./nest";
 export { isGridConstraint, gridSpaces, gridCellSize } from "./grid";
+export { isSpanConstraint } from "./span";
+export { BBox } from "./bbox";
 
 export type ConstraintSpec =
   | AlignConstraint
@@ -48,7 +59,8 @@ export type ConstraintSpec =
   | ZAboveConstraint
   | ZBelowConstraint
   | NestConstraint
-  | GridConstraint;
+  | GridConstraint
+  | SpanConstraint;
 
 // --- Factory ---
 
@@ -82,6 +94,9 @@ export const Constraint = {
   },
   grid(options: GridOptions, children: ConstraintRef[]): GridConstraint {
     return createGridConstraint(options, children);
+  },
+  span(options: SpanOptions, children: ConstraintRef[]): SpanConstraint {
+    return createSpanConstraint(options, children);
   },
 };
 
@@ -158,18 +173,24 @@ export function getPositioningConstraintRefs(
  * contribute. The layer's `resolveUnderlyingSpace` merges this with the
  * children's spaces (see `layer.tsx`).
  *
- * Measure note (Stage-1 guard): these constraint-datum domains are left
- * UNTAGGED (no Measure). The layer merges them permissively into the
- * children's POSITION, whose measure wins. A `datum(v, measure)` coordinate's
- * unit is therefore not yet enforced against the children's — a deliberate
- * permissive edge until constraint domains carry measures end-to-end.
+ * Measure (Stage-1 guard): a datum coordinate's `measure` is folded per axis
+ * with {@link mergeMeasures} (equal measures unify; two *different* defined
+ * measures throw — a unit conflict among a layer's own position constraints).
+ * The layer's `resolveAxis` then treats this as the axis's unit, PREFERRING it
+ * over the children's POSITION measure (falling back to the children only for
+ * untagged literal-pixel coords) — restoring the unit tag the scatter reduction
+ * dropped, without strict-unifying against a self-scaling child's leaked unit.
  */
 export function collectPositionDomains(constraints: ConstraintSpec[]): {
   x?: Interval.Interval;
   y?: Interval.Interval;
+  xMeasure?: Measure;
+  yMeasure?: Measure;
 } {
   let x: Interval.Interval | undefined;
   let y: Interval.Interval | undefined;
+  let xMeasure: Measure | undefined;
+  let yMeasure: Measure | undefined;
   const fold = (
     acc: Interval.Interval | undefined,
     coord: PositionConstraint["x"]
@@ -179,12 +200,50 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
     const iv = Interval.interval(n, n);
     return acc ? Interval.unionAll(acc, iv) : iv;
   };
+  const unionIv = (
+    acc: Interval.Interval | undefined,
+    iv: Interval.Interval | undefined
+  ) => (iv === undefined ? acc : acc ? Interval.unionAll(acc, iv) : iv);
+  // A datum endpoint's measure; literals carry none. `[min,max]` span endpoints
+  // unify their two measures the same way (a span in mixed units is a conflict).
+  const coordMeasure = (
+    coord: PositionConstraint["x"] | undefined
+  ): Measure | undefined =>
+    coord === undefined ? undefined : getMeasure(coord);
+  const spanMeasure = (
+    span: SpanConstraint["x"] | undefined
+  ): Measure | undefined =>
+    span === undefined
+      ? undefined
+      : mergeMeasures(
+          getMeasure(span[0]),
+          getMeasure(span[1]),
+          "span endpoints"
+        );
   for (const c of constraints) {
-    if (c.type !== "position") continue;
-    x = fold(x, c.x);
-    y = fold(y, c.y);
+    if (c.type === "position") {
+      x = fold(x, c.x);
+      y = fold(y, c.y);
+      xMeasure = mergeMeasures(
+        xMeasure,
+        coordMeasure(c.x),
+        "position constraints"
+      );
+      yMeasure = mergeMeasures(
+        yMeasure,
+        coordMeasure(c.y),
+        "position constraints"
+      );
+    } else if (isSpanConstraint(c)) {
+      // A span's two endpoints contribute their data range to the axis domain,
+      // so the layer builds a posScale covering the spanned interval.
+      x = unionIv(x, spanDatumInterval(c.x));
+      y = unionIv(y, spanDatumInterval(c.y));
+      xMeasure = mergeMeasures(xMeasure, spanMeasure(c.x), "span constraints");
+      yMeasure = mergeMeasures(yMeasure, spanMeasure(c.y), "span constraints");
+    }
   }
-  return { x, y };
+  return { x, y, xMeasure, yMeasure };
 }
 
 /**
@@ -228,6 +287,8 @@ export function applyConstraints(
       applyAlign(constraint, targets, sizes, posScales);
     } else if (constraint.type === "position") {
       applyPosition(constraint, targets, posScales);
+    } else if (isSpanConstraint(constraint)) {
+      applySpan(constraint, targets, posScales);
     } else {
       applyDistribute(constraint, targets);
     }
