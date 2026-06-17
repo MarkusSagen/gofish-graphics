@@ -1,8 +1,55 @@
 import { lerp, rybHsl2rgb } from "rybitten";
 import { ColorCoords, cubes } from "rybitten/cubes";
 import { mix, palette } from "spectral.js";
+import {
+  type ColorOp,
+  getValue,
+  getValueColorOps,
+  isValue,
+  type MaybeValue,
+} from "./ast/data";
 export const rgbToString = (rgb: ColorCoords) =>
   `rgb(${rgb.map((x) => Math.round(x * 255)).join(", ")})`;
+
+/**
+ * Apply a datum value's post-scale color transforms (`.lighten` / `.darken`)
+ * to an already-resolved color. `lighten(t)` mixes `t` toward white, `darken(t)`
+ * mixes `t` toward black — the same spectral-mix the original flower chart used
+ * by hand (`mix(c, white, 0.5)`), now expressed as a reusable color op. The
+ * color analog of a datum's pixel `offset`; see {@link ColorOp} and
+ * `getValueColorOps` in ast/data.ts.
+ */
+export const applyColorOps = (color: string, ops: ColorOp[]): string => {
+  let out = color;
+  for (const { op, amount } of ops) {
+    out = mix(out, op === "lighten" ? "#ffffff" : "#000000", amount);
+  }
+  return out;
+};
+
+/**
+ * Resolve a mark's color channel: a data-bound value maps through the unit
+ * color scale (falling back to the raw value if unscaled), then its post-scale
+ * color ops (`.lighten`/`.darken`) are applied; a literal color passes through
+ * unchanged. Shared by the `rect`, `ellipse`, and `petal` render paths so a
+ * new color-channel mark gets scale-lookup + color ops for free.
+ */
+export const resolveColorChannel = (
+  value: MaybeValue<string>,
+  unitColorScale: Map<unknown, string> | undefined
+): string | undefined => {
+  if (!isValue(value)) return value as string | undefined;
+  const scaled = unitColorScale
+    ? (unitColorScale.get(getValue(value)) ?? getValue(value))
+    : getValue(value);
+  // Color ops mix against the resolved color; only apply when the scale
+  // produced an actual color string (a scale miss on a non-string datum, e.g.
+  // a numeric value, passes through unchanged rather than feeding `mix` a
+  // non-color and throwing).
+  return typeof scaled === "string"
+    ? applyColorOps(scaled, getValueColorOps(value))
+    : (scaled as string | undefined);
+};
 
 export const createColorRange = (hue: number) =>
   Array.from({ length: 10 }, (_, i) => (i + 2) * (1 / (10 + 2)))

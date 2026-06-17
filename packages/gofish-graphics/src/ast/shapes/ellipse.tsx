@@ -1,6 +1,6 @@
 import { computeAesthetic } from "../../util";
 import * as Monotonic from "../../util/monotonic";
-import { color6_old } from "../../color";
+import { color6_old, resolveColorChannel } from "../../color";
 import {
   path,
   Path,
@@ -179,21 +179,11 @@ export const Ellipse = ({
         const unit = scaleContext?.unit;
         const unitColorScale = unit && "color" in unit ? unit.color : undefined;
         const originalFill = fill;
-        fill = isValue(fill)
-          ? unitColorScale
-            ? (unitColorScale.get(getValue(fill)) ?? getValue(fill))
-            : getValue(fill)
-          : fill;
-
-        stroke = isValue(stroke)
-          ? unitColorScale
-            ? (unitColorScale.get(getValue(stroke)) ?? getValue(stroke))
-            : getValue(stroke)
-          : stroke;
-
-        const resolvedFill = fill as string | undefined;
+        const resolvedFill = resolveColorChannel(fill, unitColorScale);
         const resolvedStroke =
-          (stroke as string | undefined) ?? resolvedFill ?? "black";
+          resolveColorChannel(stroke, unitColorScale) ??
+          resolvedFill ??
+          "black";
 
         const labelText =
           label && originalFill && isValue(originalFill)
