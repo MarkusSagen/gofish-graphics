@@ -6,14 +6,15 @@ import type { Placeable } from "../_node";
 import { Axis, ConstraintRef, axisIndex, isPlacedOn } from "./shared";
 import { getMeasure, getValue, isValue, type MaybeValue } from "../data";
 import {
+  CONTINUOUS_TYPE,
   ORDINAL,
   POSITION,
   SIZE,
   UNDEFINED,
   UnderlyingSpace,
   forgetAllMeasures,
+  isBaselineMagnitude,
   isPOSITION,
-  isSIZE,
   spaceMeasure,
 } from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
@@ -106,30 +107,29 @@ export function distributeSpaceFold(
 
   const namedKeys = keys.filter((k): k is string => k !== undefined);
   const spacing = opts.glue ? 0 : opts.spacing;
-  const allSize = targetSpaces.every(isSIZE);
-  const allPosition = targetSpaces.every((s) => isPOSITION(s) && s.domain);
+  // A "free" baseline magnitude (old SIZE) composes its Monotonic + spacing; an
+  // anchored data-positioned child (old POSITION) sums its data widths WITHOUT
+  // spacing. They are kept distinct — collapsing both into the magnitude path
+  // wrongly injected spacing into already-positioned extents.
+  const allSize = targetSpaces.every(isBaselineMagnitude);
+  const allPosition = targetSpaces.every(isPOSITION);
+  const widthAt1 = (s: UnderlyingSpace): number =>
+    (s as CONTINUOUS_TYPE).width.run(1);
   const sumWidths = (): number =>
-    targetSpaces
-      .map((s) => Interval.width((s as any).domain))
-      .reduce((a, b) => a + b, 0);
+    targetSpaces.map(widthAt1).reduce((a, b) => a + b, 0);
 
   if (opts.glue) {
-    // STACK semantics: collapse children into a single POSITION at this level
-    // using their intrinsic extent at scale = 1.
-    if (allPosition)
+    // STACK semantics: collapse children into a single anchored POSITION
+    // [0, Σ extent@σ=1] (same total whether they were magnitudes or positioned).
+    if (allSize || allPosition) {
       return POSITION(Interval.interval(0, sumWidths()), measure);
-    if (allSize) {
-      const total = targetSpaces
-        .map((s) => (s as any).domain.run(1) as number)
-        .reduce((a, b) => a + b, 0);
-      return POSITION(Interval.interval(0, total), measure);
     }
     if (namedKeys.length > 0) return ORDINAL(namedKeys);
     return UNDEFINED;
   }
 
   const childDomains = allSize
-    ? targetSpaces.map((s) => (s as any).domain as Monotonic.Monotonic)
+    ? targetSpaces.map((s) => (s as CONTINUOUS_TYPE).width)
     : [];
   const dataDriven =
     allSize && childDomains.some((d) => !Monotonic.isConstant(d));

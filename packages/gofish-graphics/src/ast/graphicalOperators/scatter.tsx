@@ -90,8 +90,9 @@ export const Scatter = createNodeOperator(
     //   - range xMin/xMax  → Constraint.span: two edges DETERMINE the size via
     //                        the linsys bbox (#39) — the size-setting the bespoke
     //                        layout used to do by hand on intrinsicDims.
-    //   - an axis with neither → a guarded cross-axis align (the old
-    //                        alignChildren, fromSize guard included).
+    //   - an axis with neither → a plain cross-axis align (data-positioned
+    //                        children are already placed by their span/position
+    //                        constraints, so the align walk skips them).
     // The layer derives the data→pixel posScale from the position/span datum
     // coords (collectPositionDomains).
     const childList = children as GoFishAST[];
