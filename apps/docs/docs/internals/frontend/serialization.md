@@ -123,6 +123,11 @@ The root types mirror the v3 fluent builder shapes:
 `arrow`, `connect`, `treemap`, and the Porter-Duff family), refs, or the
 two self-discriminating wrapper marks `offset` and `cut` (below).
 
+Operators and marks may also carry `translate: {x?, y?}`. This is canonical
+frontend IR, not a Python-only bridge sentinel: it records the structural
+`.translate({x?, y?})` modifier and the JS deserializer reapplies it as a
+runtime chain.
+
 `offset` — `{ type: "offset", x?, y?, children: [<node>] }` — wraps a single
 child and shifts it by `(x, y)` render-pixels without moving the bounds it
 advertises to its parent; it maps to the public `offset` operator.

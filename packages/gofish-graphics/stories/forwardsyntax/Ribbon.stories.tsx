@@ -1,7 +1,16 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
-import { Chart, spread, rect, stack, derive, layer, selectAll } from "../../src/lib";
+import {
+  Chart,
+  spread,
+  scatter,
+  rect,
+  stack,
+  derive,
+  layer,
+  selectAll,
+} from "../../src/lib";
 import { area, group } from "../../src/lib";
 import { orderBy } from "lodash";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
@@ -71,15 +80,14 @@ export const Polar: StoryObj<Args> = {
     layer({ coord: clock() }, [
       Chart(seafood)
         .flow(
-          spread({ by: "lake", 
-            dir: "x",
-            spacing: (2 * Math.PI) / 6,
-            mode: "center",
-            y: 50,
-            label: false,
-          }),
+          scatter({
+            by: "lake",
+            x: "lake",
+            w: 2 * Math.PI,
+            axes: { x: false, y: true },
+          }).translate({ y: 50 }),
           derive((d) => orderBy(d, "count", "asc")),
-          stack({ by: "species",  dir: "y", label: false })
+          stack({ by: "species", dir: "y", label: false })
         )
         .mark(rect({ w: 0.1, h: "count", fill: "species" }).name("bars")),
       Chart(selectAll("bars"))

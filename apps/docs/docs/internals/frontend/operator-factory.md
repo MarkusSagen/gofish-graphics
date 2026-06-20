@@ -60,6 +60,13 @@ multiplicity.
 arg shape: a second positional argument means combinator form; no second
 arg means operator form.
 
+Both forms also get the standard structural `.translate({ x?, y? })` modifier.
+It wraps the operator's produced node instead of merging `x`/`y` into the
+operator's own options. That distinction matters for operators like `scatter`:
+`scatter({ by: "lake", x: "lake" }).translate({ y: 50 })` keeps `x: "lake"` as
+scatter's discrete placement encoding, while `y: 50` belongs to the outer
+translation wrapper.
+
 ## 2. The split → fmap → combine shape
 
 Pick any layout operator and you'll find the same three steps — a fan-out
@@ -162,15 +169,18 @@ channels: {
 }
 ```
 
-| spec                            | what it does                                                        |
-| ------------------------------- | ------------------------------------------------------------------- |
-| `"size"` / `"pos"` / `"color"`  | aggregate over all of `d`, produce one value (single number/string) |
-| `{ type: "size", entry: true }` | run once per split entry, collect into array (one value per child)  |
-| user passed an array            | already final form — pass through unchanged                         |
+| spec                                           | what it does                                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `"size"` / `"pos"` / `"color"`                 | aggregate over all of `d`, produce one value (single number/string)                  |
+| `{ type: "size", entry: true }`                | run once per split entry, collect into array (one value per child)                   |
+| `{ type: "pos", entry: true, discrete: true }` | for nonnumeric categorical fields, emit evenly spaced discrete placement coordinates |
+| user passed an array                           | already final form — pass through unchanged                                          |
 
 `scatter` uses `entry: true` for `x`/`y`/`xMin`/`xMax`/`yMin`/`yMax` so a
 field name like `x: "miles"` becomes a per-group mean position
-(`src/ast/graphicalOperators/scatter.tsx:336`).
+(`src/ast/graphicalOperators/scatter.tsx:336`). Its point channels also set
+`discrete: true`, so a grouped nonnumeric field such as `x: "lake"` becomes a
+slot coordinate instead of an invalid numeric mean.
 
 ## 6. Adding a new operator: a worked example
 
@@ -212,6 +222,11 @@ so consumers can pass a field name there.
 If your operator needs to feed extra data (like `colKeys`/`rowKeys`) into
 the layout opts, return the wrapped `{entries, keys}` form from `split`
 instead of a bare Map — see `table.tsx:228` for an example.
+
+Operators created with `createOperator` automatically support
+`.translate({ x?, y? })`. You do not implement this per operator; the factory
+composes the ordinary split/channel/combine pipeline with a structural
+translation wrapper around the produced node.
 
 ## 7. The relationship with `createMark`
 

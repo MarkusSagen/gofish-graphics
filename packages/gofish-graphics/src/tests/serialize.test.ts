@@ -64,6 +64,19 @@ function validateDoc(doc: unknown, label: string, strict = true) {
 async function main() {
   console.log("\n# Frontend-IR emitter — toJSON()");
 
+  check(
+    "translate modifier exists on createOperator output",
+    typeof scatter({ x: "hp" }).translate === "function"
+  );
+  check(
+    "translate modifier exists on createMark output",
+    typeof rect({ h: "value" }).translate === "function"
+  );
+  check(
+    "translate modifier preserves transform modifiers",
+    typeof rect({ h: "value" }).translate({ x: 10 }).cut === "function"
+  );
+
   // -------------------------------------------------------------------------
   // Simple chart: data → spread → rect mark.
   // -------------------------------------------------------------------------

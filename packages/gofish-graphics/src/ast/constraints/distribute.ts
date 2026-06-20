@@ -2,8 +2,9 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { Axis, ConstraintRef } from "./shared";
+import type { Axis, AlignAnchor, ConstraintRef } from "./shared";
 import { getMeasure, getValue, isValue, type MaybeValue } from "../data";
+import type { PlacementFactEmitter } from "./placementFacts";
 import {
   CONTINUOUS_TYPE,
   ORDINAL,
@@ -50,8 +51,8 @@ export const createDistributeConstraint = (
 ): DistributeConstraint => ({
   type: "distribute",
   dir: options.dir,
-  // Glue pins spacing ≡ 0 — both for the space fold and for `applyDistribute`'s
-  // post-layout placement (which reads this `spacing`), so glued children touch.
+  // Glue pins spacing ≡ 0 for both the space fold and placement-solver
+  // relations, so glued children touch.
   spacing: options.glue ? 0 : (options.spacing ?? 8),
   mode: options.mode ?? "edge",
   order: options.order ?? "forward",
@@ -59,6 +60,69 @@ export const createDistributeConstraint = (
   children,
   measure: options.measure,
 });
+
+export function distributeChildrenInPlacementOrder(
+  constraint: DistributeConstraint,
+  children: readonly ConstraintRef[] = constraint.children
+): ConstraintRef[] {
+  return constraint.order === "reverse"
+    ? [...children].reverse()
+    : [...children];
+}
+
+export function distributePlacementAnchors(
+  mode: DistributeConstraint["mode"]
+): {
+  from: AlignAnchor;
+  to: AlignAnchor;
+} {
+  return mode === "center"
+    ? { from: "middle", to: "middle" }
+    : { from: "end", to: "start" };
+}
+
+export function lowerDistributePlacement(
+  constraint: DistributeConstraint,
+  owner: string,
+  {
+    emitter,
+    targets,
+    isInitiallyPlaced,
+  }: {
+    emitter: PlacementFactEmitter;
+    targets: Pick<Map<string, unknown>, "has">;
+    isInitiallyPlaced: (axis: Axis, name: string) => boolean;
+  }
+): void {
+  const children = constraint.children.filter((child) =>
+    targets.has(child.name)
+  );
+  const ordered = distributeChildrenInPlacementOrder(constraint, children);
+  if (ordered.length === 0) return;
+  const anchors = distributePlacementAnchors(constraint.mode);
+  for (let i = 1; i < ordered.length; i++) {
+    // A chain edge whose endpoints both arrived pre-positioned was a
+    // consistency check/no-op in the legacy walk (not an owning relation).
+    // Preserve that boundary: confluence governs the unknown positions.
+    if (
+      isInitiallyPlaced(constraint.dir, ordered[i - 1].name) &&
+      isInitiallyPlaced(constraint.dir, ordered[i].name)
+    )
+      continue;
+    emitter.relate({
+      axis: constraint.dir,
+      from: { name: ordered[i - 1].name, anchor: anchors.from },
+      to: { name: ordered[i].name, anchor: anchors.to },
+      gap: constraint.spacing,
+      owner,
+    });
+  }
+  emitter.include({
+    axis: constraint.dir,
+    name: ordered[0].name,
+    owner,
+  });
+}
 
 /**
  * The distribute constraint's *space-resolution* contribution — the bottom-up
@@ -162,11 +226,3 @@ export function distributeSpaceFold(
     return POSITION(Interval.interval(0, sumWidths()), childMeasure);
   return UNDEFINED;
 }
-
-export {
-  applyDistribute,
-  emitDistribute,
-  type DistributeInconsistencyReporter,
-  type DistributePlacement,
-  type DistributeWalkOptions,
-} from "./distributePlacement";
