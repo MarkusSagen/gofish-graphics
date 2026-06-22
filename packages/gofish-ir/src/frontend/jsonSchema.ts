@@ -109,6 +109,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           description:
             "Layer-level constraints (Layer([...]).constrain(...)), resolving refs against the child charts' names.",
         },
+        builder: {
+          type: "boolean",
+          description:
+            "True when this came from the v3 chart(...).layer(...) builder chain (not the low-level layer([...]) combinator). The deserializer reconstructs it through the real LayerBuilder so JS owns the builder's render logic (inferred axis titles, etc.).",
+        },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
       },
@@ -133,6 +138,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         type: {
           enum: [
             "derive",
+            "resolve",
             "spread",
             "stack",
             "group",
@@ -145,6 +151,9 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         translate: { $ref: "#/$defs/Translate" },
         w: { $ref: "#/$defs/ChannelValue" },
         h: { $ref: "#/$defs/ChannelValue" },
+        cols: { type: "array", items: { type: "string" } },
+        from: { type: "string" },
+        key: { type: "string" },
       },
     },
     Translate: {

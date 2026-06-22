@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
 import {
-  Chart,
+  chart,
   spread,
   scatter,
   rect,
@@ -44,21 +44,52 @@ export const Basic: StoryObj<Args> = {
     const container = initializeContainer();
 
     layer([
-      Chart(seafood)
+      chart(seafood)
         .flow(
           spread({ by: "lake",  dir: "x", spacing: 64 }),
           derive((d) => orderBy(d, "count", "asc")),
           stack({ by: "species",  dir: "y" })
         )
         .mark(rect({ h: "count", fill: "species" }).name("bars")),
-      Chart(selectAll("bars"))
-        .flow(group({ by: "datum.species" }))
+      chart(selectAll("bars"))
+        .flow(group({ by: "species" }))
         .mark(area({ opacity: 0.8 })),
     ]).render(container, {
       w: args.w,
       h: args.h,
       axes: true,
     });
+
+    return container;
+  },
+};
+
+// Same ribbon as `Basic`, expressed with the `.layer()` chaining API instead
+// of the manual `layer([...])` + `selectAll("bars")` form. The previous tier's
+// marks flow into `.layer()` implicitly (no `.name`), and `group({ by })`
+// reads the bare field off the refs (no `datum.` prefix). Should render
+// identically to `Basic`.
+export const Layered: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(seafood, { axes: true })
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 64 }),
+        derive((d) => orderBy(d, "count", "asc")),
+        stack({ by: "species", dir: "y" })
+      )
+      .mark(rect({ h: "count", fill: "species" }))
+      .layer(
+        chart() // empty scope = the previous tier's marks
+          .flow(group({ by: "species" }))
+          .mark(area({ opacity: 0.8 }))
+      )
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
 
     return container;
   },
@@ -78,7 +109,7 @@ export const Polar: StoryObj<Args> = {
     const container = initializeContainer();
 
     layer({ coord: clock() }, [
-      Chart(seafood)
+      chart(seafood)
         .flow(
           scatter({
             by: "lake",
@@ -90,8 +121,8 @@ export const Polar: StoryObj<Args> = {
           stack({ by: "species", dir: "y", label: false })
         )
         .mark(rect({ w: 0.1, h: "count", fill: "species" }).name("bars")),
-      Chart(selectAll("bars"))
-        .flow(group({ by: "datum.species" }))
+      chart(selectAll("bars"))
+        .flow(group({ by: "species" }))
         .mark(area({ opacity: 0.8 })),
     ]).render(container, {
       w: args.w,
